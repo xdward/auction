@@ -32,6 +32,11 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
+	case "expiration":
+		err := service.StartScheduleWorker("expiration", service.HandleExpiration)
+		if err != nil {
+			panic(err)
+		}
 	default:
 		fmt.Fprintf(os.Stderr, "invalid arg: %s\n", os.Args[1])
 		os.Exit(1)
