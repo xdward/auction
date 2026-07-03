@@ -8,13 +8,13 @@ import (
 )
 
 // TODO
-func HandleBuy(msg *nats.Msg) {
+func HandleSell(msg *nats.Msg) {
 	slog.Debug("received message", "data", msg.Data)
 	msg.Respond([]byte("read message"))
 }
 
 // TODO
-func HandleSell(msg *nats.Msg) {
+func HandleBuy(msg *nats.Msg) {
 	slog.Debug("received message", "data", msg.Data)
 	msg.Respond([]byte("read message"))
 }
