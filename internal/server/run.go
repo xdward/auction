@@ -10,7 +10,8 @@ import (
 	"google.golang.org/grpc"
 )
 
-func StartGRPCServer(lis net.Listener) {
+// Starts a gRPC server for AuctionService. Requests are dispatched to the service implementation.
+func StartAuctionServiceServer(lis net.Listener) {
 	s := grpc.NewServer()
 
 	nc, err := nats.Connect(nats.DefaultURL)

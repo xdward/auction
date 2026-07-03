@@ -21,5 +21,5 @@ func main() {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
-	server.StartGRPCServer(lis)
+	server.StartAuctionServiceServer(lis)
 }

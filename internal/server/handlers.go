@@ -13,11 +13,16 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// Implementation of the AuctionService server.
 type Server struct {
+	// Embedded for forward compatability.
 	service.UnimplementedAuctionServiceServer
+
+	// Shared NATS connection.
 	NATS *nats.Conn
 }
 
+// Handler for the Sell method.
 func (s *Server) Sell(ctx context.Context, req *msg.SellRequest) (*msg.SellResponse, error) {
 	slog.Debug("received message", "method", "sell")
 
@@ -42,6 +47,7 @@ func (s *Server) Sell(ctx context.Context, req *msg.SellRequest) (*msg.SellRespo
 	return &response, nil
 }
 
+// Handler for the Bid method.
 func (s *Server) Bid(ctx context.Context, req *msg.BidRequest) (*msg.BidResponse, error) {
 	slog.Debug("received message", "method", "bid")
 
@@ -66,6 +72,7 @@ func (s *Server) Bid(ctx context.Context, req *msg.BidRequest) (*msg.BidResponse
 	return &response, nil
 }
 
+// Handler for the Cancel method.
 func (s *Server) Cancel(ctx context.Context, req *msg.CancelRequest) (*msg.CancelResponse, error) {
 	slog.Debug("received message", "method", "cancel")
 
