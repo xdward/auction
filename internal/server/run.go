@@ -6,7 +6,7 @@ import (
 	"net"
 
 	"github.com/nats-io/nats.go"
-	"github.com/xdward/auction-contracts/pb/service"
+	pb "github.com/xdward/auction-contracts/gen/go"
 	"google.golang.org/grpc"
 )
 
@@ -21,7 +21,7 @@ func StartAuctionServiceServer(lis net.Listener) {
 	}
 	defer nc.Drain()
 
-	service.RegisterAuctionServiceServer(s, &Server{
+	pb.RegisterAuctionServiceServer(s, &Server{
 		NATS: nc,
 	})
 

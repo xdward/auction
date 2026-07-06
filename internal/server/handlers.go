@@ -6,8 +6,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
-	msg "github.com/xdward/auction-contracts/pb/message"
-	service "github.com/xdward/auction-contracts/pb/service"
+	pb "github.com/xdward/auction-contracts/gen/go"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -16,14 +15,14 @@ import (
 // Implementation of the AuctionService server.
 type Server struct {
 	// Embedded for forward compatability.
-	service.UnimplementedAuctionServiceServer
+	pb.UnimplementedAuctionServiceServer
 
 	// Shared NATS connection.
 	NATS *nats.Conn
 }
 
 // Handler for the Sell method.
-func (s *Server) Sell(ctx context.Context, req *msg.SellRequest) (*msg.SellResponse, error) {
+func (s *Server) Sell(ctx context.Context, req *pb.SellRequest) (*pb.SellResponse, error) {
 	slog.Debug("received message", "method", "sell")
 
 	rawRequest, err := proto.Marshal(req)
@@ -38,7 +37,7 @@ func (s *Server) Sell(ctx context.Context, req *msg.SellRequest) (*msg.SellRespo
 		return nil, status.Error(codes.Internal, "failed to handle message")
 	}
 
-	var response msg.SellResponse
+	var response pb.SellResponse
 	if err := proto.Unmarshal(res.Data, &response); err != nil {
 		slog.Error("failed to parse raw data into protobuf message")
 		return nil, status.Error(codes.Internal, "failed to handle message")
@@ -48,7 +47,7 @@ func (s *Server) Sell(ctx context.Context, req *msg.SellRequest) (*msg.SellRespo
 }
 
 // Handler for the Bid method.
-func (s *Server) Bid(ctx context.Context, req *msg.BidRequest) (*msg.BidResponse, error) {
+func (s *Server) Bid(ctx context.Context, req *pb.BidRequest) (*pb.BidResponse, error) {
 	slog.Debug("received message", "method", "bid")
 
 	rawRequest, err := proto.Marshal(req)
@@ -63,7 +62,7 @@ func (s *Server) Bid(ctx context.Context, req *msg.BidRequest) (*msg.BidResponse
 		return nil, status.Error(codes.Internal, "failed to handle message")
 	}
 
-	var response msg.BidResponse
+	var response pb.BidResponse
 	if err := proto.Unmarshal(res.Data, &response); err != nil {
 		slog.Error("failed to parse raw data into protobuf message")
 		return nil, status.Error(codes.Internal, "failed to handle message")
@@ -73,7 +72,7 @@ func (s *Server) Bid(ctx context.Context, req *msg.BidRequest) (*msg.BidResponse
 }
 
 // Handler for the Cancel method.
-func (s *Server) Cancel(ctx context.Context, req *msg.CancelRequest) (*msg.CancelResponse, error) {
+func (s *Server) Cancel(ctx context.Context, req *pb.CancelRequest) (*pb.CancelResponse, error) {
 	slog.Debug("received message", "method", "cancel")
 
 	rawRequest, err := proto.Marshal(req)
@@ -88,7 +87,7 @@ func (s *Server) Cancel(ctx context.Context, req *msg.CancelRequest) (*msg.Cance
 		return nil, status.Error(codes.Internal, "failed to handle message")
 	}
 
-	var response msg.CancelResponse
+	var response pb.CancelResponse
 	if err := proto.Unmarshal(res.Data, &response); err != nil {
 		slog.Error("failed to parse raw data into protobuf message")
 		return nil, status.Error(codes.Internal, "failed to handle message")
