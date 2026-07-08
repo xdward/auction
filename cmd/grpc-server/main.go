@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"net"
 
 	server "github.com/xdward/auction/internal/server"
@@ -14,6 +15,7 @@ var (
 )
 
 func main() {
+	slog.SetLogLoggerLevel(slog.LevelDebug)
 	flag.Parse()
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
