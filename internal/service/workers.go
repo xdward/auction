@@ -15,24 +15,19 @@ import (
 // messages for the subject it is subscribed to. Multiple queue subscribers with the same subject
 // and queue form a queue group. Messages sent to the queue group’s subject are delivered to exactly
 // one subscriber, which is randomly chosen within the group.
-func StartQueueWorker(subject string, queue string, handler nats.MsgHandler) error {
-	nc, err := nats.Connect(nats.DefaultURL)
-	if err != nil {
-		slog.Error("connection failed")
-		return err
-	}
-	defer nc.Drain()
+func StartQueueWorker(wr *WorkerResources, subj string, queue string, cb nats.MsgHandler) error {
+	slog.SetLogLoggerLevel(slog.LevelDebug)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	_, err = nc.QueueSubscribe(subject, queue, handler)
+	_, err := wr.NATS.QueueSubscribe(subj, queue, cb)
 	if err != nil {
-		slog.Error("subscription failed", "queue", queue, "subject", subject)
+		slog.Error("subscription failed", "queue", queue, "subject", subj)
 		return err
 	}
 
-	slog.Info("connected", "queue", queue, "subject", subject)
+	slog.Info("watching", "queue", queue, "subject", subj)
 	<-ctx.Done()
 
 	slog.Info("shutting down")
@@ -52,37 +47,25 @@ func StartQueueWorker(subject string, queue string, handler nats.MsgHandler) err
 //
 // Multiple invocations of this function create a pool of workers that handle scheduled messages for
 // the given subject.
-func StartScheduleWorker(subject string, handler jetstream.MessageHandler) error {
-	nc, err := nats.Connect(nats.DefaultURL)
-	if err != nil {
-		slog.Error("connection failed")
-		return err
-	}
-	defer nc.Drain()
-
-	js, err := jetstream.New(nc)
-	if err != nil {
-		slog.Error("failed to create jetstream instance")
-		return err
-	}
+func StartScheduleWorker(wr *WorkerResources, subj string, handler jetstream.MessageHandler) error {
+	slog.SetLogLoggerLevel(slog.LevelDebug)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	scheduleSubject := subject + ".schedule.*"
-	targetSubject := subject + ".target.*"
+	scheduleSubject := subj + ".schedule.*"
+	targetSubject := subj + ".target.*"
 
 	streamConfig := jetstream.StreamConfig{
-		Name:              strings.ToUpper(subject) + "_SCHEDULES",
+		Name:              strings.ToUpper(subj) + "_SCHEDULES",
 		Subjects:          []string{scheduleSubject, targetSubject},
 		AllowMsgSchedules: true, // cannot be disabled
 	}
 
-	stream, err := js.Stream(ctx, streamConfig.Name)
+	stream, err := wr.JS.Stream(ctx, streamConfig.Name)
 	if err == jetstream.ErrStreamNotFound {
-		slog.Warn("stream not found", "name", streamConfig.Name)
-		slog.Warn("creating stream", "config", streamConfig)
-		stream, err = js.CreateStream(ctx, streamConfig)
+		slog.Warn("creating new stream", "config", streamConfig)
+		stream, err = wr.JS.CreateStream(ctx, streamConfig)
 		if err != nil {
 			slog.Error("failed to create stream")
 			return err
@@ -93,7 +76,7 @@ func StartScheduleWorker(subject string, handler jetstream.MessageHandler) error
 	}
 
 	consumerConfig := jetstream.ConsumerConfig{
-		Durable:       subject + "-watcher",
+		Durable:       subj + "-watcher",
 		FilterSubject: targetSubject,
 	}
 
