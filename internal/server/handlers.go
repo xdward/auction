@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -23,75 +24,54 @@ type Server struct {
 
 // Handler for the Sell method.
 func (s *Server) Sell(ctx context.Context, req *pb.SellRequest) (*pb.SellResponse, error) {
-	slog.Debug("received message", "method", "sell")
-
-	rawRequest, err := proto.Marshal(req)
-	if err != nil {
-		slog.Error("failed to encode protobuf message")
-		return nil, status.Error(codes.Internal, "failed to handle message")
-	}
-
-	res, err := s.NATS.Request("event.sell", rawRequest, time.Second)
-	if err != nil {
-		slog.Error("failed to send NATS request", "err", err)
-		return nil, status.Error(codes.Internal, "failed to handle message")
-	}
-
-	var response pb.SellResponse
-	if err := proto.Unmarshal(res.Data, &response); err != nil {
-		slog.Error("failed to parse raw data into protobuf message")
-		return nil, status.Error(codes.Internal, "failed to handle message")
-	}
-
-	return &response, nil
+	return serviceRPC[*pb.SellRequest, *pb.SellResponse](ctx, req, s, "sell")
 }
 
 // Handler for the Bid method.
 func (s *Server) Bid(ctx context.Context, req *pb.BidRequest) (*pb.BidResponse, error) {
-	slog.Debug("received message", "method", "bid")
-
-	rawRequest, err := proto.Marshal(req)
-	if err != nil {
-		slog.Error("failed to encode protobuf message")
-		return nil, status.Error(codes.Internal, "failed to handle message")
-	}
-
-	res, err := s.NATS.Request("event.bid", rawRequest, time.Second)
-	if err != nil {
-		slog.Error("failed to send NATS request", "err", err)
-		return nil, status.Error(codes.Internal, "failed to handle message")
-	}
-
-	var response pb.BidResponse
-	if err := proto.Unmarshal(res.Data, &response); err != nil {
-		slog.Error("failed to parse raw data into protobuf message")
-		return nil, status.Error(codes.Internal, "failed to handle message")
-	}
-
-	return &response, nil
+	return serviceRPC[*pb.BidRequest, *pb.BidResponse](ctx, req, s, "bid")
 }
 
 // Handler for the Cancel method.
 func (s *Server) Cancel(ctx context.Context, req *pb.CancelRequest) (*pb.CancelResponse, error) {
-	slog.Debug("received message", "method", "cancel")
+	return serviceRPC[*pb.CancelRequest, *pb.CancelResponse](ctx, req, s, "cancel")
+}
 
-	rawRequest, err := proto.Marshal(req)
+// Forwards an RPC request to NATS, then returns the corresponding response.
+func serviceRPC[Request proto.Message, Response proto.Message](
+	_ context.Context,
+	req Request,
+	s *Server,
+	method string,
+) (Response, error) {
+	// serialize the protobuf request
+	payload, err := proto.Marshal(req)
 	if err != nil {
-		slog.Error("failed to encode protobuf message")
-		return nil, status.Error(codes.Internal, "failed to handle message")
+		slog.Error(err.Error())
+		var zero Response
+		return zero, status.Error(codes.InvalidArgument, "malformed request")
 	}
 
-	res, err := s.NATS.Request("event.cancel", rawRequest, time.Second)
+	// forward the request to NATS
+	subject := fmt.Sprintf("event.%s", method)
+	responseMsg, err := s.NATS.Request(subject, payload, time.Second)
 	if err != nil {
-		slog.Error("failed to send NATS request", "err", err)
-		return nil, status.Error(codes.Internal, "failed to handle message")
+		slog.Error(err.Error())
+		var zero Response
+		return zero, status.Error(codes.Unavailable, "service unavailable")
 	}
 
-	var response pb.CancelResponse
-	if err := proto.Unmarshal(res.Data, &response); err != nil {
-		slog.Error("failed to parse raw data into protobuf message")
-		return nil, status.Error(codes.Internal, "failed to handle message")
+	// deserialize the NATS reply into the protobuf response and return it
+	var res Response
+	if err := proto.Unmarshal(responseMsg.Data, res); err != nil {
+		if len(responseMsg.Data) > 0 {
+			slog.Error("worker: " + string(responseMsg.Data))
+		} else {
+			slog.Error(err.Error())
+		}
+		var zero Response
+		return zero, status.Error(codes.Internal, "failed to handle message")
 	}
 
-	return &response, nil
+	return res, nil
 }
