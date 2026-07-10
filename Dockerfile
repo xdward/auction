@@ -5,7 +5,8 @@
 FROM golang:1.26 AS build-stage
 
 ENV CGO_ENABLED=0 \
-    GOOS=linux
+    GOOS=linux \
+    GOARCH=amd64
 
 WORKDIR /app
 
@@ -16,19 +17,19 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    go build -o expire -v ./cmd/worker/expire
+    go build -ldflags "-s -w" -o expire -v ./cmd/worker/expire
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    go build -o sell -v ./cmd/worker/sell
+    go build -ldflags "-s -w" -o sell -v ./cmd/worker/sell
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    go build -o bid -v ./cmd/worker/bid
+    go build -ldflags "-s -w" -o bid -v ./cmd/worker/bid
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    go build -o cancel -v ./cmd/worker/cancel
+    go build -ldflags "-s -w" -o cancel -v ./cmd/worker/cancel
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    go build -o server -v ./cmd/server
+    go build -ldflags "-s -w" -o server -v ./cmd/server
 
 #### Release Stage ####
 
