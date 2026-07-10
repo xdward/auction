@@ -13,16 +13,11 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type WorkerResources struct {
-	NATS *nats.Conn
-	JS   jetstream.JetStream
-}
-
 type ScheduleMessageData struct {
 	item_id uint64
 }
 
-func (wr *WorkerResources) HandleSell(msg *nats.Msg) {
+func (w *Worker) HandleSell(msg *nats.Msg) {
 	slog.Debug("received message")
 
 	// deserialize protobuf request stored in the message
@@ -61,7 +56,7 @@ func (wr *WorkerResources) HandleSell(msg *nats.Msg) {
 	scheduleMsg.Header.Set("Nats-Schedule-Target", fmt.Sprintf("expiration.target.%s", uuid))
 
 	// publish schedule
-	_, err = wr.JS.PublishMsg(ctx, scheduleMsg)
+	_, err = w.JS.PublishMsg(ctx, scheduleMsg)
 	if err != nil {
 		slog.Error(err.Error())
 		msg.Respond([]byte(err.Error()))
@@ -86,7 +81,7 @@ func (wr *WorkerResources) HandleSell(msg *nats.Msg) {
 }
 
 // TODO
-func (wr *WorkerResources) HandleBuy(msg *nats.Msg) {
+func (w *Worker) HandleBid(msg *nats.Msg) {
 	slog.Debug("received message")
 	msg.Respond([]byte("ok"))
 	slog.Debug("delivered response")
@@ -94,7 +89,7 @@ func (wr *WorkerResources) HandleBuy(msg *nats.Msg) {
 }
 
 // TODO
-func (wr *WorkerResources) HandleCancel(msg *nats.Msg) {
+func (w *Worker) HandleCancel(msg *nats.Msg) {
 	slog.Debug("received message")
 	msg.Respond([]byte("ok"))
 	slog.Debug("delivered response")
@@ -102,7 +97,7 @@ func (wr *WorkerResources) HandleCancel(msg *nats.Msg) {
 }
 
 // TODO
-func (wr *WorkerResources) HandleExpiration(msg jetstream.Msg) {
+func (w *Worker) HandleExpire(msg jetstream.Msg) {
 	slog.Debug("received message")
 	msg.Ack()
 	slog.Debug("ack")

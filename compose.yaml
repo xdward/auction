@@ -7,12 +7,12 @@ services:
         volumes:
             - nats_jetstream:/data
 
-    expiration-worker:
+    expire-worker:
         build:
             context: .
-            target: worker
-        image: auction-worker:latest
-        command: ["--worker", "expiration", "--address", "nats:4222"]
+            target: expire-worker
+        image: auction-expire-worker:latest
+        command: ["--address", "nats:4222"]
         depends_on:
             nats:
                 condition: service_started
@@ -22,13 +22,13 @@ services:
     sell-worker:
         build:
             context: .
-            target: worker
-        image: auction-worker:latest
-        command: ["--worker", "sell", "--address", "nats:4222"]
+            target: sell-worker
+        image: auction-sell-worker:latest
+        command: ["--address", "nats:4222"]
         depends_on:
             nats:
                 condition: service_started
-            expiration-worker:
+            expire-worker:
                 condition: service_started
         networks:
             - isolated
@@ -42,7 +42,7 @@ services:
         depends_on:
             nats:
                 condition: service_started
-            expiration-worker:
+            expire-worker:
                 condition: service_started
             sell-worker:
                 condition: service_started
