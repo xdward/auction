@@ -1,0 +1,61 @@
+services:
+    nats:
+        image: nats:latest
+        command: ["--jetstream", "--store_dir", "/data", "--http_port", "8222"]
+        networks:
+            - isolated
+        volumes:
+            - nats_jetstream:/data
+
+    expiration-worker:
+        build:
+            context: .
+            target: worker
+        image: auction-worker:latest
+        command: ["--worker", "expiration", "--address", "nats:4222"]
+        depends_on:
+            nats:
+                condition: service_started
+        networks:
+            - isolated
+
+    sell-worker:
+        build:
+            context: .
+            target: worker
+        image: auction-worker:latest
+        command: ["--worker", "sell", "--address", "nats:4222"]
+        depends_on:
+            nats:
+                condition: service_started
+            expiration-worker:
+                condition: service_started
+        networks:
+            - isolated
+
+    grpc-server:
+        build:
+            context: .
+            target: server
+        image: auction-server:latest
+        command: ["--port", "50051", "--address", "nats:4222"]
+        depends_on:
+            nats:
+                condition: service_started
+            expiration-worker:
+                condition: service_started
+            sell-worker:
+                condition: service_started
+        networks:
+            - isolated
+            - public
+        ports:
+            - 50051:50051
+
+volumes:
+    nats_jetstream:
+
+networks:
+    isolated:
+        internal: true
+    public:
