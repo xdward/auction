@@ -9,6 +9,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/redis/go-redis/v9"
 )
 
 // NewScheduleConsumer attaches a new consumer to a stream. The first invocation of this function
@@ -24,10 +25,16 @@ import (
 //
 // Multiple invocations of this function create a pool of workers that handle scheduled messages for
 // the given subject.
-func NewScheduleConsumer(w *Worker, addr string, subj string, handler jetstream.MessageHandler) {
+func NewScheduleConsumer(
+	w *Worker,
+	natsAddr string,
+	redisAddr string,
+	subj string,
+	handler jetstream.MessageHandler,
+) {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 
-	nc, err := nats.Connect(addr)
+	nc, err := nats.Connect(natsAddr)
 	if err != nil {
 		panic(err)
 	}
@@ -38,8 +45,15 @@ func NewScheduleConsumer(w *Worker, addr string, subj string, handler jetstream.
 		panic(err)
 	}
 
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     redisAddr,
+		Password: "", // no password parameter
+		DB:       0,  // use default db
+	})
+
 	w.NATS = nc
 	w.JS = js
+	w.Redis = rdb
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()

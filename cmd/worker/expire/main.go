@@ -12,8 +12,12 @@ func main() {
 	if !ok {
 		natsAddress = nats.DefaultURL
 	}
+	redisAddress, ok := os.LookupEnv("REDIS_ADDRESS")
+	if !ok {
+		redisAddress = "localhost:6379"
+	}
 
 	w := service.Worker{}
 
-	service.NewScheduleConsumer(&w, natsAddress, "expire", w.HandleExpire)
+	service.NewScheduleConsumer(&w, natsAddress, redisAddress, "expire", w.HandleExpire)
 }

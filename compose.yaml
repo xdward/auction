@@ -7,6 +7,19 @@ services:
         volumes:
             - nats_jetstream:/data
 
+    redis:
+        image: redis:8-alpine
+        volumes:
+            - redis_data:/data
+        networks:
+            - isolated
+        healthcheck:
+            test: ["CMD", "redis-cli", "ping"]
+            interval: 1m
+            timeout: 3s
+            retries: 5
+            start_period: 5s
+
     expire-worker:
         build:
             context: .
@@ -14,9 +27,12 @@ services:
         image: auction-expire-worker:latest
         environment:
             NATS_ADDRESS: "nats:4222"
+            REDIS_ADDRESS: "redis:6379"
         depends_on:
             nats:
                 condition: service_started
+            redis:
+                condition: service_healthy
         networks:
             - isolated
 
@@ -27,9 +43,12 @@ services:
         image: auction-sell-worker:latest
         environment:
             NATS_ADDRESS: "nats:4222"
+            REDIS_ADDRESS: "redis:6379"
         depends_on:
             nats:
                 condition: service_started
+            redis:
+                condition: service_healthy
             expire-worker:
                 condition: service_started
         networks:
@@ -42,9 +61,12 @@ services:
         image: auction-server:latest
         environment:
             NATS_ADDRESS: "nats:4222"
+            REDIS_ADDRESS: "redis:6379"
         depends_on:
             nats:
                 condition: service_started
+            redis:
+                condition: service_healthy
             expire-worker:
                 condition: service_started
             sell-worker:
@@ -57,6 +79,7 @@ services:
 
 volumes:
     nats_jetstream:
+    redis_data:
 
 networks:
     isolated:

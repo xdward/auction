@@ -12,8 +12,19 @@ func main() {
 	if !ok {
 		natsAddress = nats.DefaultURL
 	}
+	redisAddress, ok := os.LookupEnv("REDIS_ADDRESS")
+	if !ok {
+		redisAddress = "localhost:6379"
+	}
 
 	w := service.Worker{}
 
-	service.NewQueueSubscriber(&w, natsAddress, "event.sell", "sell-workers", w.HandleSell)
+	service.NewQueueSubscriber(
+		&w,
+		natsAddress,
+		redisAddress,
+		"event.sell",
+		"sell-workers",
+		w.HandleSell,
+	)
 }
