@@ -12,7 +12,8 @@ services:
             context: .
             target: expire-worker
         image: auction-expire-worker:latest
-        command: ["--address", "nats:4222"]
+        environment:
+            NATS_ADDRESS: "nats:4222"
         depends_on:
             nats:
                 condition: service_started
@@ -24,7 +25,8 @@ services:
             context: .
             target: sell-worker
         image: auction-sell-worker:latest
-        command: ["--address", "nats:4222"]
+        environment:
+            NATS_ADDRESS: "nats:4222"
         depends_on:
             nats:
                 condition: service_started
@@ -38,7 +40,8 @@ services:
             context: .
             target: server
         image: auction-server:latest
-        command: ["--port", "50051", "--address", "nats:4222"]
+        environment:
+            NATS_ADDRESS: "nats:4222"
         depends_on:
             nats:
                 condition: service_started

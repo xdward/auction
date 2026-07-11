@@ -1,17 +1,19 @@
 package main
 
 import (
-	"flag"
+	"os"
 
 	"github.com/nats-io/nats.go"
 	"github.com/xdward/auction/internal/service"
 )
 
 func main() {
-	addrPtr := flag.String("address", nats.DefaultURL, "NATS server address")
-	flag.Parse()
+	natsAddress, ok := os.LookupEnv("NATS_ADDRESS")
+	if !ok {
+		natsAddress = nats.DefaultURL
+	}
 
 	w := service.Worker{}
 
-	service.NewQueueSubscriber(&w, *addrPtr, "event.sell", "sell-workers", w.HandleSell)
+	service.NewQueueSubscriber(&w, natsAddress, "event.sell", "sell-workers", w.HandleSell)
 }

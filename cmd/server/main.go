@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log/slog"
 	"net"
@@ -14,25 +13,18 @@ import (
 )
 
 func main() {
-	// help message
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: %s\n", os.Args[0])
-		flag.PrintDefaults()
+	// retrieve server port and nats address
+	port, ok := os.LookupEnv("GRPC_SERVER_PORT")
+	if !ok {
+		port = "50051"
 	}
-
-	// parse flags
-	port := flag.Int("port", 50051, "grpc server port")
-	natsAddress := flag.String("address", nats.DefaultURL, "NATS server address")
-	flag.Parse()
-
-	// deny extra arguments
-	if len(flag.Args()) != 0 {
-		fmt.Fprintf(os.Stderr, "too many arguments: %s", flag.Args())
-		os.Exit(1)
+	natsAddress, ok := os.LookupEnv("NATS_ADDRESS")
+	if !ok {
+		natsAddress = nats.DefaultURL
 	}
 
 	// create network socket
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
 	if err != nil {
 		panic(err)
 	}
@@ -41,7 +33,7 @@ func main() {
 	s := grpc.NewServer()
 
 	// open nats connection
-	nc, err := nats.Connect(*natsAddress)
+	nc, err := nats.Connect(natsAddress)
 	if err != nil {
 		panic(err)
 	}
