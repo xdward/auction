@@ -50,6 +50,7 @@ func NewScheduleConsumer(
 		Password: "", // no password parameter
 		DB:       0,  // use default db
 	})
+	defer rdb.Close()
 
 	w.NATS = nc
 	w.JS = js
