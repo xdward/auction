@@ -85,7 +85,7 @@ func (w *Worker) HandleSell(msg *nats.Msg) {
 	}
 
 	// create schedule message
-	scheduleMsg := nats.NewMsg(fmt.Sprintf("expiration.schedule.%d", &sellRequest.ItemId))
+	scheduleMsg := nats.NewMsg(fmt.Sprintf("expire.schedule.%d", &sellRequest.ItemId))
 	scheduleData := ScheduleMessageData{
 		item_id: sellRequest.ItemId,
 	}
@@ -103,7 +103,7 @@ func (w *Worker) HandleSell(msg *nats.Msg) {
 	)
 	scheduleMsg.Header.Set(
 		"Nats-Schedule-Target",
-		fmt.Sprintf("expiration.target.%d", &sellRequest.ItemId),
+		fmt.Sprintf("expire.target.%d", &sellRequest.ItemId),
 	)
 
 	// publish schedule
