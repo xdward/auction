@@ -1,4 +1,4 @@
-package service
+package db
 
 const SnapshotScript = `
 local sortedSetKey = KEYS[1]

@@ -10,6 +10,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/redis/go-redis/v9"
+	"github.com/xdward/auction/internal/service/db"
 )
 
 // NewScheduleConsumer attaches a new consumer to a stream. The first invocation of this function
@@ -45,16 +46,16 @@ func NewScheduleConsumer(
 		panic(err)
 	}
 
-	rdb := redis.NewClient(&redis.Options{
+	db := db.NewClient(&redis.Options{
 		Addr:     redisAddr,
 		Password: "", // no password parameter
 		DB:       0,  // use default db
 	})
-	defer rdb.Close()
+	defer db.Close()
 
 	w.NATS = nc
 	w.JS = js
-	w.Redis = rdb
+	w.DB = db
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()

@@ -3,11 +3,11 @@ package service
 import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
-	"github.com/redis/go-redis/v9"
+	"github.com/xdward/auction/internal/service/db"
 )
 
 type Worker struct {
-	NATS  *nats.Conn
-	JS    jetstream.JetStream
-	Redis *redis.Client
+	NATS *nats.Conn
+	JS   jetstream.JetStream
+	DB   *db.Client
 }

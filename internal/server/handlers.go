@@ -8,6 +8,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	pb "github.com/xdward/auction-contracts/gen/go"
 	"github.com/xdward/auction/internal/service"
+	"github.com/xdward/auction/internal/service/db"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -108,7 +109,7 @@ func (s *Server) EventStream(_ *emptypb.Empty, stream pb.AuctionService_EventStr
 	ctx := stream.Context()
 
 	// send an initial snapshot and capture the current version
-	snapshot, err := service.GetSnapshot(ctx, s.Redis)
+	snapshot, err := db.GetSnapshot(ctx, s.Redis)
 	if err != nil {
 		slog.Error(err.Error())
 		return status.Error(codes.Internal, "failed to get snapshot")
@@ -125,7 +126,7 @@ func (s *Server) EventStream(_ *emptypb.Empty, stream pb.AuctionService_EventStr
 	}
 
 	// using the version counter, resolve the id to start reading stream entries from
-	cursor, err := s.Redis.Get(ctx, service.VersionToEntryPrefix+snapshot.Version).Result()
+	cursor, err := s.Redis.Get(ctx, db.VersionToEntryPrefix+snapshot.Version).Result()
 	if err == redis.Nil {
 		cursor = "0-0"
 	} else if err != nil {
@@ -141,7 +142,7 @@ func (s *Server) EventStream(_ *emptypb.Empty, stream pb.AuctionService_EventStr
 
 		// read a batch of stream entries, starting at the cursor location
 		streams, err := s.Redis.XRead(ctx, &redis.XReadArgs{
-			Streams: []string{service.StreamKey, cursor},
+			Streams: []string{db.StreamKey, cursor},
 			Count:   10,
 			Block:   0, // if there are no updates, block
 		}).Result()
@@ -169,25 +170,25 @@ func (s *Server) EventStream(_ *emptypb.Empty, stream pb.AuctionService_EventStr
 
 				// deserialize the event message into the correct type
 				switch msg.Values["event"] {
-				case service.SellEvent:
+				case db.SellEvent:
 					var sellEvent pb.SellEvent
 					if err := proto.Unmarshal(rawData, &sellEvent); err != nil {
 						return err
 					}
 					response.Event = &pb.EventStreamResponse_SellEvent{SellEvent: &sellEvent}
-				case service.BidEvent:
+				case db.BidEvent:
 					var bidEvent pb.BidEvent
 					if err := proto.Unmarshal(rawData, &bidEvent); err != nil {
 						return err
 					}
 					response.Event = &pb.EventStreamResponse_BidEvent{BidEvent: &bidEvent}
-				case service.CancelEvent:
+				case db.CancelEvent:
 					var cancelEvent pb.CancelEvent
 					if err := proto.Unmarshal(rawData, &cancelEvent); err != nil {
 						return err
 					}
 					response.Event = &pb.EventStreamResponse_CancelEvent{CancelEvent: &cancelEvent}
-				case service.ExpireEvent:
+				case db.ExpireEvent:
 					var expireEvent pb.ExpireEvent
 					if err := proto.Unmarshal(rawData, &expireEvent); err != nil {
 						return err

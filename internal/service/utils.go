@@ -1,5 +1,11 @@
 package service
 
+import "errors"
+
+var (
+	TypeCastingErr = errors.New("failed type cast")
+)
+
 func ToBytes(v any) ([]byte, error) {
 	switch v := v.(type) {
 	case []byte:
