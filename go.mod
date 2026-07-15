@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/nats-io/nats.go v1.52.0
 	github.com/redis/go-redis/v9 v9.21.0
-	github.com/xdward/auction-contracts v0.0.0-20260713183322-761bf2c9015c
+	github.com/xdward/auction-contracts v0.0.0-20260715025046-f3ceec233025
 	google.golang.org/grpc v1.82.0
 	google.golang.org/protobuf v1.36.11
 )

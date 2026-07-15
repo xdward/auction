@@ -5,7 +5,9 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	pb "github.com/xdward/auction-contracts/gen/go"
+	"github.com/xdward/auction/internal/service"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -103,5 +105,106 @@ func (s *Server) Cancel(ctx context.Context, req *pb.CancelRequest) (*pb.CancelR
 }
 
 func (s *Server) EventStream(_ *emptypb.Empty, stream pb.AuctionService_EventStreamServer) error {
-	return nil
+	ctx := stream.Context()
+
+	// send an initial snapshot and capture the current version
+	snapshot, err := service.GetSnapshot(ctx, s.Redis)
+	if err != nil {
+		slog.Error(err.Error())
+		return status.Error(codes.Internal, "failed to get snapshot")
+	}
+
+	err = stream.Send(&pb.EventStreamResponse{
+		Event: &pb.EventStreamResponse_Snapshot{
+			Snapshot: snapshot,
+		},
+	})
+
+	if err != nil {
+		return status.Error(codes.Internal, "failed to send stream response message")
+	}
+
+	// using the version counter, resolve the id to start reading stream entries from
+	cursor, err := s.Redis.Get(ctx, service.VersionToEntryPrefix+snapshot.Version).Result()
+	if err == redis.Nil {
+		cursor = "0-0"
+	} else if err != nil {
+		return status.Error(codes.Internal, "failed to resolve start stream id")
+	}
+
+	// stream unti the client disconnects/error
+	for {
+		// gracefully stop
+		if err := ctx.Err(); err != nil {
+			return status.Error(codes.Canceled, "closed stream")
+		}
+
+		// read a batch of stream entries, starting at the cursor location
+		streams, err := s.Redis.XRead(ctx, &redis.XReadArgs{
+			Streams: []string{service.StreamKey, cursor},
+			Count:   10,
+			Block:   0, // if there are no updates, block
+		}).Result()
+		if err != nil {
+			slog.Error(err.Error())
+			return status.Error(codes.Internal, "failed to read events")
+		}
+
+		// no new messages; loop
+		if len(streams) == 0 {
+			continue
+		}
+
+		// iterate each message in all streams (one stream)
+		for _, st := range streams {
+			for _, msg := range st.Messages {
+				// read serialized event message
+				rawData, err := service.ToBytes(msg.Values["data"])
+				if err != nil {
+					return service.TypeCastingErr
+				}
+
+				// create client response
+				var response pb.EventStreamResponse
+
+				// deserialize the event message into the correct type
+				switch msg.Values["event"] {
+				case service.SellEvent:
+					var sellEvent pb.SellEvent
+					if err := proto.Unmarshal(rawData, &sellEvent); err != nil {
+						return err
+					}
+					response.Event = &pb.EventStreamResponse_SellEvent{SellEvent: &sellEvent}
+				case service.BidEvent:
+					var bidEvent pb.BidEvent
+					if err := proto.Unmarshal(rawData, &bidEvent); err != nil {
+						return err
+					}
+					response.Event = &pb.EventStreamResponse_BidEvent{BidEvent: &bidEvent}
+				case service.CancelEvent:
+					var cancelEvent pb.CancelEvent
+					if err := proto.Unmarshal(rawData, &cancelEvent); err != nil {
+						return err
+					}
+					response.Event = &pb.EventStreamResponse_CancelEvent{CancelEvent: &cancelEvent}
+				case service.ExpireEvent:
+					var expireEvent pb.ExpireEvent
+					if err := proto.Unmarshal(rawData, &expireEvent); err != nil {
+						return err
+					}
+					response.Event = &pb.EventStreamResponse_ExpireEvent{ExpireEvent: &expireEvent}
+				default:
+					return status.Error(codes.Internal, "invalid event type")
+				}
+
+				// send the message to the client
+				if err := stream.Send(&response); err != nil {
+					return status.Error(codes.Internal, "failed to handle message")
+				}
+
+				// advance cursor
+				cursor = msg.ID
+			}
+		}
+	}
 }

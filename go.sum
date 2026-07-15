@@ -36,6 +36,8 @@ github.com/xdward/auction-contracts v0.0.0-20260713175931-f22a07918203 h1:w51f2Q
 github.com/xdward/auction-contracts v0.0.0-20260713175931-f22a07918203/go.mod h1:JSlTaunCxH1coUngPPSTifKCGs+7qdlAz6aMDqGKPpU=
 github.com/xdward/auction-contracts v0.0.0-20260713183322-761bf2c9015c h1:cLrYW8OmBJofBkANUcqdOgNU9gvOl1J7ET0vvFuh8XQ=
 github.com/xdward/auction-contracts v0.0.0-20260713183322-761bf2c9015c/go.mod h1:JSlTaunCxH1coUngPPSTifKCGs+7qdlAz6aMDqGKPpU=
+github.com/xdward/auction-contracts v0.0.0-20260715025046-f3ceec233025 h1:YqdIMC6p0pHQwYDHdnJqCqLoGsQXIr8wPKdppxbyDuY=
+github.com/xdward/auction-contracts v0.0.0-20260715025046-f3ceec233025/go.mod h1:JSlTaunCxH1coUngPPSTifKCGs+7qdlAz6aMDqGKPpU=
 github.com/zeebo/xxh3 v1.1.0 h1:s7DLGDK45Dyfg7++yxI0khrfwq9661w9EN78eP/UZVs=
 github.com/zeebo/xxh3 v1.1.0/go.mod h1:IisAie1LELR4xhVinxWS5+zf1lA4p0MW4T+w+W07F5s=
 go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=
