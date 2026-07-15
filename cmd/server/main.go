@@ -7,13 +7,14 @@ import (
 	"os"
 
 	"github.com/nats-io/nats.go"
+	"github.com/redis/go-redis/v9"
 	pb "github.com/xdward/auction-contracts/gen/go"
 	"github.com/xdward/auction/internal/server"
 	"google.golang.org/grpc"
 )
 
 func main() {
-	// retrieve server port and nats address
+	// retrieve environment variables
 	port, ok := os.LookupEnv("GRPC_SERVER_PORT")
 	if !ok {
 		port = "50051"
@@ -21,6 +22,10 @@ func main() {
 	natsAddress, ok := os.LookupEnv("NATS_ADDRESS")
 	if !ok {
 		natsAddress = nats.DefaultURL
+	}
+	redisAddress, ok := os.LookupEnv("REDIS_ADDRESS")
+	if !ok {
+		redisAddress = "localhost:6379"
 	}
 
 	// create network socket
@@ -39,9 +44,18 @@ func main() {
 	}
 	defer nc.Drain()
 
-	// link server resources
+	// create redis client
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     redisAddress,
+		Password: "", // no password parameter
+		DB:       0,  // use default db
+	})
+	defer rdb.Close()
+
+	// register service
 	pb.RegisterAuctionServiceServer(s, &server.Server{
-		NATS: nc,
+		NATS:  nc,
+		Redis: rdb,
 	})
 
 	// start server

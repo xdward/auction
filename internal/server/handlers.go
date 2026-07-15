@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // Handler for the Sell method.
@@ -99,4 +100,8 @@ func (s *Server) Cancel(ctx context.Context, req *pb.CancelRequest) (*pb.CancelR
 	}
 
 	return &res, nil
+}
+
+func (s *Server) EventStream(_ *emptypb.Empty, stream pb.AuctionService_EventStreamServer) error {
+	return nil
 }
