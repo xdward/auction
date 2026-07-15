@@ -41,3 +41,9 @@ redis.call('SET', versionToStreamKey .. newVersion, streamEntryID)
 
 return { newVersion, streamEntryID }
 `
+
+var UpdateScriptKeys = []string{
+	VersionKey,
+	StreamKey,
+	VersionToEntryPrefix,
+}

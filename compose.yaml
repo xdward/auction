@@ -20,6 +20,9 @@ services:
             retries: 5
             start_period: 5s
 
+    # The expire service worker is critical for the integrity of the auction service. Other worker
+    # servives will depend on this service. This avoids issues such as someone placing a bid after
+    # the deadline has passed. Due to this dependency, the worker image is built here once.
     expire-worker:
         build:
             context: .
@@ -38,11 +41,24 @@ services:
             - isolated
 
     sell-worker:
-        build:
-            context: .
-            target: worker
         image: auction-worker:latest
         command: ["--task", "sell"]
+        environment:
+            NATS_ADDRESS: "nats:4222"
+            REDIS_ADDRESS: "redis:6379"
+        depends_on:
+            nats:
+                condition: service_started
+            redis:
+                condition: service_healthy
+            expire-worker:
+                condition: service_started
+        networks:
+            - isolated
+
+    bid-worker:
+        image: auction-worker:latest
+        command: ["--task", "bid"]
         environment:
             NATS_ADDRESS: "nats:4222"
             REDIS_ADDRESS: "redis:6379"

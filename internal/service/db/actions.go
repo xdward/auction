@@ -82,3 +82,54 @@ func (c *Client) Sell(
 
 	return true, nil
 }
+
+func (c *Client) Bid(ctx context.Context, bidRequest *pb.BidRequest) (bool, error) {
+	key := BuildListingKey(bidRequest.ItemId) // listing key
+
+	// serialize event data; it will stored in the appended stream entry
+	entry, err := proto.Marshal(&pb.BidEvent{
+		ItemId:   bidRequest.ItemId,
+		BidderId: bidRequest.BidderId,
+		Amount:   bidRequest.Amount,
+	})
+	if err != nil {
+		return false, err
+	}
+
+	// transaction function that stops execution when a watched key is changed
+	txf := func(tx *redis.Tx) error {
+		// retrieve current bid and ensure the new bid is higher
+		currentBid, err := tx.HGet(ctx, key, "bid").Uint64()
+		if err != nil {
+			return err
+		}
+		if !(bidRequest.Amount > currentBid) {
+			return LowBidErr
+		}
+
+		// transactional pipeline for executing multiple commands in a single read/write:
+		// 	1) update the bid and bidder fields
+		// 	2) update the version key and store the stream index to read updates from
+		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+			pipe.HSet(ctx, key, Listing{
+				Bid:    bidRequest.Amount,
+				Bidder: bidRequest.BidderId,
+			})
+			pipe.Eval(ctx, UpdateScript, UpdateScriptKeys, BidEvent, entry)
+			return nil
+		})
+
+		return err
+	}
+
+	// watch the listing key and execute the transactional function
+	if err := c.rdb.Watch(ctx, txf, key); err != nil {
+		if err == LowBidErr {
+			return false, nil
+		} else {
+			return false, err
+		}
+	}
+
+	return true, nil
+}
