@@ -15,7 +15,9 @@ func (c *Client) Sell(
 	start time.Time,
 	end time.Time,
 ) (bool, error) {
-	// serialize stream entry
+	key := BuildListingKey(sellRequest.ItemId) // listing key
+
+	// serialize event data; it will stored in the appended stream entry
 	encodedEvent, err := proto.Marshal(&pb.SellEvent{
 		ItemId:     sellRequest.ItemId,
 		SellerId:   sellRequest.SellerId,
@@ -25,12 +27,9 @@ func (c *Client) Sell(
 		return false, err
 	}
 
-	// build key
-	key := BuildListingKey(sellRequest.ItemId)
-
-	// transaction function that ensures a listing doesn't exist before creating it
+	// transaction function that stops execution when a watched key is changed
 	txf := func(tx *redis.Tx) error {
-		// check if the listing already exists
+		// ensure the listing doesn't exist
 		exists, err := tx.Exists(ctx, key).Result()
 		if err != nil {
 			return err
@@ -38,9 +37,14 @@ func (c *Client) Sell(
 			return AlreadyExistsErr
 		}
 
-		// execute write commands atomically
+		// transactional pipeline for executing multiple commands in a single read/write:
+		// 	1) create a hash with the listing key, and store the listing record
+		// 	2) add the listing key to the sorted set, with the start time as the score
+		// 	3) run the update script
+		// 		a) increment the version key
+		// 		b) add a new stream entry with the serialized event data
+		// 		c) store the stream index to read updates from
 		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
-			// store the listing as a redis hash
 			pipe.HSet(ctx, key, Listing{
 				Item:      sellRequest.ItemId,
 				Seller:    sellRequest.SellerId,
@@ -50,28 +54,22 @@ func (c *Client) Sell(
 				ExpiresAt: end.Format(time.RFC3339),
 				Active:    true,
 			})
-			// add a reference to the listing to the insertion order set
 			pipe.ZAdd(ctx, SortedSetKey, redis.Z{
 				Score:  float64(start.UnixMicro()),
 				Member: key,
 			})
-			// atomically:
-			// 1) update version
-			// 2) append event to stream
-			// 3) set version_to_id:<v> = streamID
 			pipe.Eval(ctx, UpdateScript, []string{
 				VersionKey,
 				StreamKey,
 				VersionToEntryPrefix,
 			}, SellEvent, encodedEvent)
-
 			return nil
 		})
 
 		return err
 	}
 
-	// execute the transaction under the watch command
+	// watch the listing key and execute the transactional function
 	if err := c.rdb.Watch(ctx, txf, key); err != nil {
 		if err == AlreadyExistsErr {
 			return false, nil
@@ -98,7 +96,7 @@ func (c *Client) Bid(ctx context.Context, bidRequest *pb.BidRequest) (bool, erro
 
 	// transaction function that stops execution when a watched key is changed
 	txf := func(tx *redis.Tx) error {
-		// retrieve current bid and ensure the new bid is higher
+		// ensure the new bid is higher than the current bid
 		currentBid, err := tx.HGet(ctx, key, "bid").Uint64()
 		if err != nil {
 			return err
@@ -109,7 +107,10 @@ func (c *Client) Bid(ctx context.Context, bidRequest *pb.BidRequest) (bool, erro
 
 		// transactional pipeline for executing multiple commands in a single read/write:
 		// 	1) update the bid and bidder fields
-		// 	2) update the version key and store the stream index to read updates from
+		// 	2) run the update script
+		// 		a) increment the version key
+		// 		b) add a new stream entry with the serialized event data
+		// 		c) store the stream index to read updates from
 		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
 			pipe.HSet(ctx, key, Listing{
 				Bid:    bidRequest.Amount,

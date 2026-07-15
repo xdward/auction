@@ -16,7 +16,10 @@ import (
 func (w *Worker) HandleSell(msg *nats.Msg) {
 	slog.Debug("received message")
 
-	// deserialize protobuf request stored in the message
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	// deserialize the protobuf request stored in the nats message
 	var sellRequest pb.SellRequest
 	if err := proto.Unmarshal(msg.Data, &sellRequest); err != nil {
 		slog.Error(err.Error())
@@ -24,14 +27,12 @@ func (w *Worker) HandleSell(msg *nats.Msg) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	// capture current and expiration times
+	// record the current time and calculate the expiration time
 	now := time.Now().UTC()
 	duration := time.Duration(sellRequest.Duration) * time.Millisecond
 	expiration := now.Add(duration)
 
+	// perform the auction sell action
 	success, err := w.DB.Sell(ctx, &sellRequest, now, expiration)
 	if err != nil {
 		slog.Error(err.Error())
@@ -39,7 +40,7 @@ func (w *Worker) HandleSell(msg *nats.Msg) {
 		return
 	}
 
-	// create schedule message
+	// create a nats message and store the encoded schedule data
 	scheduleMsg := nats.NewMsg(fmt.Sprintf("expire.schedule.%d", &sellRequest.ItemId))
 	scheduleData := ScheduleMessageData{
 		item_id: sellRequest.ItemId,
@@ -52,6 +53,7 @@ func (w *Worker) HandleSell(msg *nats.Msg) {
 	}
 	scheduleMsg.Data = payload
 
+	// set the schedule headers
 	scheduleMsg.Header.Set(
 		"Nats-Schedule",
 		fmt.Sprintf("@at %s", expiration.Format(time.RFC3339)),
@@ -61,7 +63,7 @@ func (w *Worker) HandleSell(msg *nats.Msg) {
 		fmt.Sprintf("expire.target.%d", &sellRequest.ItemId),
 	)
 
-	// publish schedule
+	// publish the schedule
 	_, err = w.JS.PublishMsg(ctx, scheduleMsg)
 	if err != nil {
 		slog.Error(err.Error())
@@ -69,12 +71,10 @@ func (w *Worker) HandleSell(msg *nats.Msg) {
 		return
 	}
 
-	// create protobuf response
+	// reply to the nats request with the serialized protobuf response
 	sellResponse := pb.SellResponse{
 		Success: success,
 	}
-
-	// reply with the serialized protobuf response
 	replyMsg, err := proto.Marshal(&sellResponse)
 	if err != nil {
 		slog.Error(err.Error())
