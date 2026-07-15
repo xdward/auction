@@ -23,8 +23,9 @@ services:
     expire-worker:
         build:
             context: .
-            target: expire-worker
-        image: auction-expire-worker:latest
+            target: worker
+        image: auction-worker:latest
+        command: ["--task", "expire"]
         environment:
             NATS_ADDRESS: "nats:4222"
             REDIS_ADDRESS: "redis:6379"
@@ -39,8 +40,9 @@ services:
     sell-worker:
         build:
             context: .
-            target: sell-worker
-        image: auction-sell-worker:latest
+            target: worker
+        image: auction-worker:latest
+        command: ["--task", "sell"]
         environment:
             NATS_ADDRESS: "nats:4222"
             REDIS_ADDRESS: "redis:6379"
