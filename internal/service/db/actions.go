@@ -33,7 +33,7 @@ func (c *Client) Sell(
 		exists, err := tx.Exists(ctx, key).Result()
 		if err != nil {
 			return err
-		} else if exists == 1 {
+		} else if exists > 0 {
 			return AlreadyExistsErr
 		}
 
@@ -191,4 +191,67 @@ func (c *Client) Cancel(ctx context.Context, cancelRequest *pb.CancelRequest) (b
 	}
 
 	return true, nil
+}
+
+func (c *Client) Expire(ctx context.Context, itemID uint64) error {
+	key := ListingKey(itemID) // listing key
+
+	// transaction function that stops execution when a watched key is changed
+	txf := func(tx *redis.Tx) error {
+		// check if the listing is active
+		exists, err := tx.Exists(ctx, key).Result()
+		if err != nil {
+			return nil // already deleted or doesn't exist; there is nothing to do
+		} else if exists == 0 {
+			return err
+		}
+
+		// get the current bid, the highest bidder, and the seller
+		bid, err := tx.HGet(ctx, key, "bid").Uint64()
+		if err != nil {
+			return err
+		}
+		bidderID, err := tx.HGet(ctx, key, "bidder").Uint64()
+		if err != nil {
+			return err
+		}
+		sellerID, err := tx.HGet(ctx, key, "seller").Uint64()
+		if err != nil {
+			return err
+		}
+
+		// serialize event data; it will stored in the appended stream entry
+		entry, err := proto.Marshal(&pb.ExpireEvent{
+			ItemId:   itemID,
+			Sold:     bid > 0,
+			SellerId: sellerID,
+			BidderId: bidderID,
+			Amount:   bid,
+		})
+		if err != nil {
+			return err
+		}
+
+		// transactional pipeline for executing multiple commands in a single read/write:
+		// 	1) update the bid and bidder fields
+		// 	2) run the update script
+		// 		a) increment the version key
+		// 		b) add a new stream entry with the serialized event data
+		// 		c) store the stream index to read updates from
+		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+			pipe.Del(ctx, key)
+			pipe.ZRem(ctx, SortedSetKey, key)
+			pipe.Eval(ctx, UpdateScript, UpdateScriptKeys, ExpireEvent, entry)
+			return nil
+		})
+
+		return err
+	}
+
+	// watch the listing key and execute the transactional function
+	if err := c.rdb.Watch(ctx, txf, key); err != nil {
+		return err
+	}
+
+	return nil
 }

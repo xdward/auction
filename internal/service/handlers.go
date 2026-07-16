@@ -43,7 +43,7 @@ func (w *Worker) HandleSell(msg *nats.Msg) {
 	// create a nats message and store the encoded schedule data
 	scheduleMsg := nats.NewMsg(fmt.Sprintf("expire.schedule.%d", &sellRequest.ItemId))
 	scheduleData := ScheduleMessageData{
-		item_id: sellRequest.ItemId,
+		ItemID: sellRequest.ItemId,
 	}
 	payload, err := json.Marshal(scheduleData)
 	if err != nil {
@@ -160,9 +160,31 @@ func (w *Worker) HandleCancel(msg *nats.Msg) {
 	slog.Debug("delivered response")
 }
 
-// TODO
 func (w *Worker) HandleExpire(msg jetstream.Msg) {
 	slog.Debug("received message")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	// decode the schedule data from the nats message
+	var scheduleData ScheduleMessageData
+	if err := json.Unmarshal(msg.Data(), &scheduleData); err != nil {
+		slog.Error(err.Error())
+		slog.Warn("message returned, trying again later")
+		return
+	}
+
+	// perform the auction expire action
+	err := w.DB.Expire(ctx, scheduleData.ItemID)
+	if err != nil {
+		slog.Error(err.Error())
+		// don't nak as it will either:
+		// - instantly redeliver the message and spike cpu usage
+		// - duplicate the original message; both will be redelivered
+		slog.Warn("message returned, trying again later")
+		return
+	}
+
 	msg.Ack()
 	slog.Debug("ack")
 }

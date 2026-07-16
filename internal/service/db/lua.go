@@ -19,7 +19,7 @@ end
 
 local version = redis.call('GET', versionKey)
 if not version then
-	version = "0-0"
+	version = "0"
 end
 
 return { cjson.encode(listings), version }

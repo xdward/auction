@@ -16,8 +16,7 @@ services:
         healthcheck:
             test: ["CMD", "redis-cli", "ping"]
             interval: 1m
-            timeout: 3s
-            retries: 5
+            timeout: 1s
             start_period: 5s
 
     # The expire service worker is critical for the integrity of the auction service. Other worker

@@ -1,5 +1,5 @@
 package service
 
 type ScheduleMessageData struct {
-	item_id uint64
+	ItemID uint64 `json:"item_id"`
 }
