@@ -15,7 +15,7 @@ func (c *Client) Sell(
 	start time.Time,
 	end time.Time,
 ) (bool, error) {
-	key := BuildListingKey(sellRequest.ItemId) // listing key
+	key := ListingKey(sellRequest.ItemId) // listing key
 
 	// serialize event data; it will stored in the appended stream entry
 	encodedEvent, err := proto.Marshal(&pb.SellEvent{
@@ -82,7 +82,7 @@ func (c *Client) Sell(
 }
 
 func (c *Client) Bid(ctx context.Context, bidRequest *pb.BidRequest) (bool, error) {
-	key := BuildListingKey(bidRequest.ItemId) // listing key
+	key := ListingKey(bidRequest.ItemId) // listing key
 
 	// serialize event data; it will stored in the appended stream entry
 	entry, err := proto.Marshal(&pb.BidEvent{
@@ -112,10 +112,7 @@ func (c *Client) Bid(ctx context.Context, bidRequest *pb.BidRequest) (bool, erro
 		// 		b) add a new stream entry with the serialized event data
 		// 		c) store the stream index to read updates from
 		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
-			pipe.HSet(ctx, key, Listing{
-				Bid:    bidRequest.Amount,
-				Bidder: bidRequest.BidderId,
-			})
+			pipe.HSet(ctx, key, "bid", bidRequest.Amount, "bidder", bidRequest.BidderId)
 			pipe.Eval(ctx, UpdateScript, UpdateScriptKeys, BidEvent, entry)
 			return nil
 		})
@@ -126,6 +123,67 @@ func (c *Client) Bid(ctx context.Context, bidRequest *pb.BidRequest) (bool, erro
 	// watch the listing key and execute the transactional function
 	if err := c.rdb.Watch(ctx, txf, key); err != nil {
 		if err == LowBidErr {
+			return false, nil
+		} else {
+			return false, err
+		}
+	}
+
+	return true, nil
+}
+
+func (c *Client) Cancel(ctx context.Context, cancelRequest *pb.CancelRequest) (bool, error) {
+	key := ListingKey(cancelRequest.ItemId) // listing key
+
+	// transaction function that stops execution when a watched key is changed
+	txf := func(tx *redis.Tx) error {
+		// check if the listing is active
+		active, err := tx.HGet(ctx, key, "active").Bool()
+		if err != nil {
+			return err
+		} else if !active {
+			return InactiveErr
+		}
+
+		// get the current bid and the user holding it
+		bid, err := tx.HGet(ctx, key, "bid").Uint64()
+		if err != nil {
+			return err
+		}
+		bidderID, err := tx.HGet(ctx, key, "bidder").Uint64()
+		if err != nil {
+			return err
+		}
+
+		// serialize event data; it will stored in the appended stream entry
+		entry, err := proto.Marshal(&pb.CancelEvent{
+			ItemId:   cancelRequest.ItemId,
+			SellerId: cancelRequest.SellerId,
+			BidderId: bidderID,
+			Amount:   bid,
+		})
+		if err != nil {
+			return err
+		}
+
+		// transactional pipeline for executing multiple commands in a single read/write:
+		// 	1) update the bid and bidder fields
+		// 	2) run the update script
+		// 		a) increment the version key
+		// 		b) add a new stream entry with the serialized event data
+		// 		c) store the stream index to read updates from
+		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+			pipe.HSet(ctx, key, "active", false)
+			pipe.Eval(ctx, UpdateScript, UpdateScriptKeys, CancelEvent, entry)
+			return nil
+		})
+
+		return err
+	}
+
+	// watch the listing key and execute the transactional function
+	if err := c.rdb.Watch(ctx, txf, key); err != nil {
+		if err == InactiveErr {
 			return false, nil
 		} else {
 			return false, err

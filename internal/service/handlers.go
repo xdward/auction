@@ -123,12 +123,41 @@ func (w *Worker) HandleBid(msg *nats.Msg) {
 	slog.Debug("delivered response")
 }
 
-// TODO
 func (w *Worker) HandleCancel(msg *nats.Msg) {
 	slog.Debug("received message")
-	msg.Respond([]byte("ok"))
-	slog.Debug("delivered response")
 
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	// deserialize the protobuf request stored in the nats message
+	var cancelRequest pb.CancelRequest
+	if err := proto.Unmarshal(msg.Data, &cancelRequest); err != nil {
+		slog.Error(err.Error())
+		msg.Respond([]byte(err.Error()))
+		return
+	}
+
+	// perform the auction cancel action
+	success, err := w.DB.Cancel(ctx, &cancelRequest)
+	if err != nil {
+		slog.Error(err.Error())
+		msg.Respond([]byte(err.Error()))
+		return
+	}
+
+	// reply to the nats request with the serialized protobuf response
+	cancelResponse := &pb.CancelResponse{
+		Success: success,
+	}
+	replyMsg, err := proto.Marshal(cancelResponse)
+	if err != nil {
+		slog.Error(err.Error())
+		msg.Respond([]byte(err.Error()))
+		return
+	}
+	msg.Respond(replyMsg)
+
+	slog.Debug("delivered response")
 }
 
 // TODO

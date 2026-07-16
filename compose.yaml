@@ -72,6 +72,22 @@ services:
         networks:
             - isolated
 
+    cancel-worker:
+        image: auction-worker:latest
+        command: ["--task", "cancel"]
+        environment:
+            NATS_ADDRESS: "nats:4222"
+            REDIS_ADDRESS: "redis:6379"
+        depends_on:
+            nats:
+                condition: service_started
+            redis:
+                condition: service_healthy
+            expire-worker:
+                condition: service_started
+        networks:
+            - isolated
+
     grpc-server:
         build:
             context: .

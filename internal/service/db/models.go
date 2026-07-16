@@ -27,6 +27,6 @@ type Listing struct {
 	Active    bool   `redis:"active"`
 }
 
-func BuildListingKey(id uint64) string {
+func ListingKey(id uint64) string {
 	return ListingKeyPrefix + strconv.FormatUint(id, 10)
 }
