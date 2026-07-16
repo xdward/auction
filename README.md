@@ -1,5 +1,7 @@
 # Auction
 
+Go service that runs an auction workflow over a gRPC server.
+
 ```mermaid
 flowchart RL
     grpc@{ shape: rect, label: "gRPC Server" }
@@ -37,4 +39,21 @@ flowchart RL
 
     c1 .->|Updates| redis
     redis -.-|EventStream| grpc
+```
+
+See the [contracts](https://github.com/xdward/auction-contracts) repository for service definitions.
+
+## Features
+
+- Requests are queued through NATS for low latency and high throughput
+- Auction state is stored in Redis for persistency and fast read/writes
+- Atomic operations through Redis transactions for safe concurrent updates
+- Snapshots and real-time updates for client synchronization
+
+## Local Development
+
+Start the service:
+
+```bash
+docker compose up -d --build
 ```
