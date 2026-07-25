@@ -9,6 +9,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// Sell creates a new listing if it does not already exist.
 func (c *Client) Sell(
 	ctx context.Context,
 	sellRequest *pb.SellRequest,
@@ -81,6 +82,7 @@ func (c *Client) Sell(
 	return true, nil
 }
 
+// Bid updates a listing with a higher bid.
 func (c *Client) Bid(ctx context.Context, bidRequest *pb.BidRequest) (bool, error) {
 	key := ListingKey(bidRequest.ItemId) // listing key
 
@@ -132,6 +134,7 @@ func (c *Client) Bid(ctx context.Context, bidRequest *pb.BidRequest) (bool, erro
 	return true, nil
 }
 
+// Cancel marks an active listing as inactive.
 func (c *Client) Cancel(ctx context.Context, cancelRequest *pb.CancelRequest) (bool, error) {
 	key := ListingKey(cancelRequest.ItemId) // listing key
 
@@ -193,6 +196,7 @@ func (c *Client) Cancel(ctx context.Context, cancelRequest *pb.CancelRequest) (b
 	return true, nil
 }
 
+// Expire closes a listing after its scheduled expiration.
 func (c *Client) Expire(ctx context.Context, itemID uint64) error {
 	key := ListingKey(itemID) // listing key
 

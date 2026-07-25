@@ -8,6 +8,7 @@ import (
 	pb "github.com/xdward/auction-contracts/gen/go"
 )
 
+// GetSnapshot returns the current auction state and version.
 func GetSnapshot(ctx context.Context, rdb *redis.Client) (*pb.Snapshot, error) {
 	// execute snapshot script
 	lua := redis.NewScript(SnapshotScript)

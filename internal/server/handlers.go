@@ -15,7 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-// Handler for the Sell method.
+// Sell forwards a sell request to NATS and returns the response.
 func (s *Server) Sell(ctx context.Context, req *pb.SellRequest) (*pb.SellResponse, error) {
 	// serialize the protobuf request
 	payload, err := proto.Marshal(req)
@@ -45,7 +45,7 @@ func (s *Server) Sell(ctx context.Context, req *pb.SellRequest) (*pb.SellRespons
 	return &res, nil
 }
 
-// Handler for the Bid method.
+// Bid forwards a bid request to NATS and returns the response.
 func (s *Server) Bid(ctx context.Context, req *pb.BidRequest) (*pb.BidResponse, error) {
 	// serialize the protobuf request
 	payload, err := proto.Marshal(req)
@@ -75,7 +75,7 @@ func (s *Server) Bid(ctx context.Context, req *pb.BidRequest) (*pb.BidResponse, 
 	return &res, nil
 }
 
-// Handler for the Cancel method.
+// Cancel forwards a cancel request to NATS and returns the response.
 func (s *Server) Cancel(ctx context.Context, req *pb.CancelRequest) (*pb.CancelResponse, error) {
 	// serialize the protobuf request
 	payload, err := proto.Marshal(req)
@@ -105,6 +105,7 @@ func (s *Server) Cancel(ctx context.Context, req *pb.CancelRequest) (*pb.CancelR
 	return &res, nil
 }
 
+// EventStream streams the current snapshot and subsequent auction events.
 func (s *Server) EventStream(_ *emptypb.Empty, stream pb.AuctionService_EventStreamServer) error {
 	ctx := stream.Context()
 

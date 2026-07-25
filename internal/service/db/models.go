@@ -1,8 +1,6 @@
 package db
 
-import (
-	"strconv"
-)
+import "strconv"
 
 const (
 	ListingKeyPrefix     = "auction:listing:"

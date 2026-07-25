@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// HandleSell processes a sell request and schedules its expiration.
 func (w *Worker) HandleSell(msg *nats.Msg) {
 	slog.Debug("received message")
 
@@ -86,6 +87,7 @@ func (w *Worker) HandleSell(msg *nats.Msg) {
 	slog.Debug("delivered response")
 }
 
+// HandleBid processes a bid request.
 func (w *Worker) HandleBid(msg *nats.Msg) {
 	slog.Debug("received message")
 
@@ -123,6 +125,7 @@ func (w *Worker) HandleBid(msg *nats.Msg) {
 	slog.Debug("delivered response")
 }
 
+// HandleCancel processes a cancel request.
 func (w *Worker) HandleCancel(msg *nats.Msg) {
 	slog.Debug("received message")
 
@@ -160,6 +163,7 @@ func (w *Worker) HandleCancel(msg *nats.Msg) {
 	slog.Debug("delivered response")
 }
 
+// HandleExpire processes an expiration message for a listing.
 func (w *Worker) HandleExpire(msg jetstream.Msg) {
 	slog.Debug("received message")
 
