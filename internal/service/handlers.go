@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -41,28 +40,13 @@ func (w *Worker) HandleSell(msg *nats.Msg) {
 		return
 	}
 
-	// create a nats message and store the encoded schedule data
-	scheduleMsg := nats.NewMsg(fmt.Sprintf("expire.schedule.%d", &sellRequest.ItemId))
-	scheduleData := ScheduleMessageData{
-		ItemID: sellRequest.ItemId,
-	}
-	payload, err := json.Marshal(scheduleData)
+	// create a scheduled nats message for expiration
+	scheduleMsg, err := BuildScheduleMessage(sellRequest.ItemId, expiration)
 	if err != nil {
 		slog.Error(err.Error())
 		msg.Respond([]byte(err.Error()))
 		return
 	}
-	scheduleMsg.Data = payload
-
-	// set the schedule headers
-	scheduleMsg.Header.Set(
-		"Nats-Schedule",
-		fmt.Sprintf("@at %s", expiration.Format(time.RFC3339)),
-	)
-	scheduleMsg.Header.Set(
-		"Nats-Schedule-Target",
-		fmt.Sprintf("expire.target.%d", &sellRequest.ItemId),
-	)
 
 	// publish the schedule
 	_, err = w.JS.PublishMsg(ctx, scheduleMsg)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"github.com/nats-io/nats.go"
@@ -21,7 +20,7 @@ import (
 //	msg := nats.NewMsg("subject.schedule.1")
 //	msg.Data = []byte("hello")
 //	msg.Header.Set("Nats-Schedule", "@at "+"2026-05-27T22:47:00Z")
-//	msg.Header.Set("Nats-Schedule-Target", "expiration.target.1")
+//	msg.Header.Set("Nats-Schedule-Target", "auction.target.1")
 //	ack, err := js.PublishMsg(ctx, msg)
 //
 // Multiple invocations of this function create a pool of workers that handle scheduled messages for
@@ -60,14 +59,7 @@ func NewScheduleConsumer(
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	scheduleSubject := subj + ".schedule.*"
-	targetSubject := subj + ".target.*"
-
-	streamConfig := jetstream.StreamConfig{
-		Name:              strings.ToUpper(subj) + "_SCHEDULES",
-		Subjects:          []string{scheduleSubject, targetSubject},
-		AllowMsgSchedules: true, // cannot be disabled
-	}
+	streamConfig, targetSubject := ScheduleStreamConfig()
 
 	stream, err := w.JS.Stream(ctx, streamConfig.Name)
 	if err == jetstream.ErrStreamNotFound {
