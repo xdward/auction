@@ -7,8 +7,8 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	pb "github.com/xdward/auction-contracts/gen/go"
-	"github.com/xdward/auction/internal/service"
 	"github.com/xdward/auction/internal/service/db"
+	"github.com/xdward/auction/util"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -161,9 +161,9 @@ func (s *Server) EventStream(_ *emptypb.Empty, stream pb.AuctionService_EventStr
 		for _, st := range streams {
 			for _, msg := range st.Messages {
 				// read serialized event message
-				rawData, err := service.ToBytes(msg.Values["data"])
+				rawData, err := util.ToBytes(msg.Values["data"])
 				if err != nil {
-					return service.TypeCastingErr
+					return util.TypeCastingErr
 				}
 
 				// create client response
