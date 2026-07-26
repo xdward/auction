@@ -9,6 +9,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	pb "github.com/xdward/auction-contracts/gen/go"
+	"github.com/xdward/auction/util"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -28,12 +29,10 @@ func (w *Worker) HandleSell(msg *nats.Msg) {
 	}
 
 	// record the current time and calculate the expiration time
-	now := time.Now().UTC()
-	duration := time.Duration(sellRequest.Duration) * time.Millisecond
-	expiration := now.Add(duration)
+	start, end := util.DurationTimestamps(sellRequest.Duration)
 
 	// perform the auction sell action
-	success, err := w.DB.Sell(ctx, &sellRequest, now, expiration)
+	success, err := w.DB.Sell(ctx, &sellRequest, start, end)
 	if err != nil {
 		slog.Error(err.Error())
 		msg.Respond([]byte(err.Error()))
@@ -41,7 +40,7 @@ func (w *Worker) HandleSell(msg *nats.Msg) {
 	}
 
 	// create a scheduled nats message for expiration
-	scheduleMsg, err := BuildScheduleMessage(sellRequest.ItemId, expiration)
+	scheduleMsg, err := BuildScheduleMessage(sellRequest.ItemId, end)
 	if err != nil {
 		slog.Error(err.Error())
 		msg.Respond([]byte(err.Error()))
