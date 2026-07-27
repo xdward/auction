@@ -1,12 +1,16 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/redis/go-redis/v9"
+	"github.com/xdward/auction/internal/messaging"
 	"github.com/xdward/auction/internal/service"
 	"github.com/xdward/auction/internal/service/db"
 )
@@ -23,6 +27,9 @@ func main() {
 
 	task := flag.String("task", "", "event to handle: sell, bid, cancel, expire")
 	flag.Parse()
+
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
 
 	nc, err := nats.Connect(natsAddress)
 	if err != nil {
@@ -50,13 +57,25 @@ func main() {
 
 	switch *task {
 	case "sell":
-		service.NewQueueSubscriber(&w, "event.sell", "sell-workers", w.HandleSell)
+		err = messaging.RunQueueSubscriber(ctx, nc, "event.sell", "sell-workers", w.HandleSell)
+		if err != nil && err != context.Canceled {
+			panic(err)
+		}
 	case "bid":
-		service.NewQueueSubscriber(&w, "event.bid", "bid-workers", w.HandleBid)
+		err = messaging.RunQueueSubscriber(ctx, nc, "event.bid", "bid-workers", w.HandleBid)
+		if err != nil && err != context.Canceled {
+			panic(err)
+		}
 	case "cancel":
-		service.NewQueueSubscriber(&w, "event.cancel", "cancel-workers", w.HandleCancel)
+		err = messaging.RunQueueSubscriber(ctx, nc, "event.cancel", "cancel-workers", w.HandleCancel)
+		if err != nil && err != context.Canceled {
+			panic(err)
+		}
 	case "expire":
-		service.NewScheduleConsumer(&w, "expire", w.HandleExpire)
+		err = messaging.RunScheduleConsumer(ctx, js, "expire", w.HandleExpire)
+		if err != nil && err != context.Canceled {
+			panic(err)
+		}
 	default:
 		panic("invalid --task (must be: sell, bid, cancel, expire)")
 	}

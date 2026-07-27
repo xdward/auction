@@ -9,6 +9,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	pb "github.com/xdward/auction-contracts/gen/go"
+	"github.com/xdward/auction/internal/messaging"
 	"github.com/xdward/auction/util"
 	"google.golang.org/protobuf/proto"
 )
@@ -41,7 +42,7 @@ func (w *Worker) HandleSell(msg *nats.Msg) {
 
 	if success {
 		// create a scheduled nats message for expiration
-		scheduleMsg, err := BuildScheduleMessage(sellRequest.ItemId, end)
+		scheduleMsg, err := messaging.BuildScheduleMessage(sellRequest.ItemId, end)
 		if err != nil {
 			slog.Error(err.Error())
 			msg.Respond([]byte(err.Error()))
@@ -156,7 +157,7 @@ func (w *Worker) HandleExpire(msg jetstream.Msg) {
 	defer cancel()
 
 	// decode the schedule data from the nats message
-	var scheduleData ScheduleMessageData
+	var scheduleData messaging.ScheduleMessageData
 	if err := json.Unmarshal(msg.Data(), &scheduleData); err != nil {
 		slog.Error(err.Error())
 		slog.Warn("message returned, trying again later")
