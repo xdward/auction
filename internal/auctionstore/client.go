@@ -28,6 +28,32 @@ func (c *Client) Close() error {
 }
 
 // Sell creates a new listing if it does not already exist.
+//
+// New listings are added to two collections in Redis: a hash and a sorted set.
+//
+// The hash is used to store a record for each auction listing. Each record uses the item id as part
+// of its key to ensure that a single item cannot have multiple listings. Each record holds pairs of
+// fields and values to store information about each listing.
+//
+//	{
+//		"auction:listings:7" -> { ... }
+//		"auction:listings:8" -> { ... }
+//		...
+//	}
+//
+// The sorted set is used to sort listings by the sequence that they are created. When creating a
+// new listing, the current Unix time is captured and assigned as the score for the new listing.
+//
+//	{
+//		("auction:listings:7", 4000001),
+//		("auction:listings:8", 4000035),
+//		...
+//	}
+//
+// While creating a listing, the Redis client is watched for other transactions that may be using
+// the same item id. Additionally, the HSET and ZADD commands are pipelined together as a
+// transaction. These mechanisms are used to avoid race conditions and make calls to these functions
+// thread-safe.
 func (c *Client) Sell(
 	ctx context.Context,
 	sellRequest *pb.SellRequest,
@@ -104,6 +130,16 @@ func (c *Client) Sell(
 }
 
 // Bid updates a listing with a higher bid.
+//
+// This function uses Redis watch and transaction mechanisms to ensure atomic changes and prevent
+// race conditions when changes occur simultaneously.
+//
+// Example:
+//
+// If two bids arrive at the same time (A > B), and bid B is processed first, the transaction for
+// bid A will be canceled. In the worker handler, bid A will not be requeued and it is expected that
+// the user attempts the action again. Conversely, if bid A is processed first, bid B will be
+// discarded for being lower than the current highest bid.
 func (c *Client) Bid(ctx context.Context, bidRequest *pb.BidRequest) (bool, error) {
 	key := ListingKey(bidRequest.ItemId) // listing key
 
@@ -181,6 +217,12 @@ func (c *Client) Bid(ctx context.Context, bidRequest *pb.BidRequest) (bool, erro
 }
 
 // Cancel marks an active listing as inactive.
+//
+// The auction state in Redis is updated to flag the item as cancelled, as long as the user is
+// authorized to make this transaction. In other words, the request must be the seller. Any relevant
+// information is streamed.
+//
+// Redis transactions are used for consistency.
 func (c *Client) Cancel(ctx context.Context, cancelRequest *pb.CancelRequest) (bool, error) {
 	key := ListingKey(cancelRequest.ItemId) // listing key
 
@@ -260,6 +302,13 @@ func (c *Client) Cancel(ctx context.Context, cancelRequest *pb.CancelRequest) (b
 }
 
 // Expire closes a listing after its scheduled expiration.
+//
+// The worker queue should invoke this function after receiving a scheduled message. It will either:
+//
+//   - Conclude the auction listing and stream relevant information, if it is active
+//   - Cleanup the auction listing and stream nothing, if it is inactive
+//
+// Redis transactions are used for consistency.
 func (c *Client) Expire(ctx context.Context, itemID uint64) error {
 	key := ListingKey(itemID) // listing key
 
