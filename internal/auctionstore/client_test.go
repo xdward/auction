@@ -15,52 +15,81 @@ func TestSell(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	// Set up a dummy Redis instance for the test.
 	server := miniredis.RunT(t)
 	client := NewClient(&redis.Options{
 		Addr: server.Addr(),
 	})
 	defer client.Close()
 
-	// Create a valid sell request.
 	request := pb.SellRequest{
 		ItemId:   1,
 		SellerId: 1,
 		Duration: uint64(time.Duration(time.Hour).Milliseconds()),
 	}
 
-	// Create the listing and generate its expected key.
 	start, end := util.DurationTimestamps(request.Duration)
-	success, err := client.Sell(ctx, &request, start, end)
-	if err != nil {
-		t.Fatal(err)
+
+	if success, err := client.Sell(ctx, &request, start, end); err != nil {
+		t.Fatal(err.Error())
 	} else if !success {
 		t.Fatal("failed to sell an item")
 	}
+
 	key := ListingKey(request.ItemId)
 
-	// The listing hash should exist after a successful sell.
-	exists, err := client.rdb.Exists(ctx, key).Result()
-	if err != nil {
-		t.Fatal(err)
+	if exists, err := client.rdb.Exists(ctx, key).Result(); err != nil {
+		t.Fatal(err.Error())
 	} else if exists == 0 {
-		t.Fatal("item not found")
+		t.Fatal("listing not found")
 	}
 
-	// The listing key should also be indexed in the recent-listings sorted set.
-	_, err = client.rdb.ZScore(ctx, SortedSetKey, key).Result()
-	if err == redis.Nil {
-		t.Fatal("listing key was not found in the sorted set")
+	if _, err := client.rdb.ZScore(ctx, SortedSetKey, key).Result(); err == redis.Nil {
+		t.Fatal("sorted set does not contain the listing key")
 	} else if err != nil {
-		t.Fatal(err)
+		t.Fatal(err.Error())
 	}
 
-	// A sell event should have been appended to the event stream.
-	n, err := client.rdb.XLen(ctx, StreamKey).Result()
-	if err != nil {
-		t.Fatal(err)
-	} else if n < 1 {
-		t.Fatal("sell event was not appended to the stream")
+	if n, err := client.rdb.XLen(ctx, StreamKey).Result(); err != nil {
+		t.Fatal(err.Error())
+	} else if n != 1 {
+		t.Fatalf("expected one sell event, got %d stream entries", n)
+	}
+}
+
+func TestSellDuplicate(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	server := miniredis.RunT(t)
+	client := NewClient(&redis.Options{
+		Addr: server.Addr(),
+	})
+	defer client.Close()
+
+	request := pb.SellRequest{
+		ItemId:   1,
+		SellerId: 1,
+		Duration: uint64(time.Hour.Milliseconds()),
+	}
+
+	key := ListingKey(request.ItemId)
+
+	client.rdb.HSet(ctx, key, Listing{
+		Item:      1,
+		Seller:    1,
+		Bid:       0,
+		Bidder:    0,
+		CreatedAt: "",
+		ExpiresAt: "",
+		Active:    true,
+	})
+
+	start, end := util.DurationTimestamps(request.Duration)
+
+	if success, err := client.Sell(ctx, &request, start, end); err != nil {
+		t.Fatal(err.Error())
+	} else if success {
+		t.Fatal("expected duplicate sell to fail")
 	}
 }
 
@@ -68,66 +97,145 @@ func TestBid(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	// Set up a dummy Redis instance for the test.
 	server := miniredis.RunT(t)
 	client := NewClient(&redis.Options{
 		Addr: server.Addr(),
 	})
 	defer client.Close()
 
-	// Create an active listing first, since bids require an existing item.
-	sellRequest := pb.SellRequest{
+	request := pb.BidRequest{
 		ItemId:   1,
-		SellerId: 1,
-		Duration: uint64(time.Duration(time.Hour).Milliseconds()),
-	}
-
-	// Set up a listing that can be bid on.
-	start, end := util.DurationTimestamps(sellRequest.Duration)
-	success, err := client.Sell(ctx, &sellRequest, start, end)
-	if err != nil {
-		t.Fatal(err)
-	} else if !success {
-		t.Fatal("failed to sell an item")
-	}
-
-	// Create a bid higher than the default current bid.
-	bidRequest := pb.BidRequest{
-		ItemId:   sellRequest.ItemId,
 		BidderId: 2,
 		Amount:   100,
 	}
 
-	// Place the bid and verify it is accepted.
-	success, err = client.Bid(ctx, &bidRequest)
-	if err != nil {
-		t.Fatal(err)
+	key := ListingKey(request.ItemId)
+
+	client.rdb.HSet(ctx, key, Listing{
+		Item:      1,
+		Seller:    1,
+		Bid:       0,
+		Bidder:    0,
+		CreatedAt: "",
+		ExpiresAt: "",
+		Active:    true,
+	})
+
+	if success, err := client.Bid(ctx, &request); err != nil {
+		t.Fatal(err.Error())
 	} else if !success {
 		t.Fatal("failed to place a bid")
 	}
-	key := ListingKey(bidRequest.ItemId)
 
-	// The listing should now reflect the new highest bid.
-	bid, err := client.rdb.HGet(ctx, key, "bid").Uint64()
-	if err != nil {
-		t.Fatal(err)
-	} else if bid != bidRequest.Amount {
-		t.Fatalf("unexpected bid: got %d want %d", bid, bidRequest.Amount)
+	if bid, err := client.rdb.HGet(ctx, key, "bid").Uint64(); err != nil {
+		t.Fatal(err.Error())
+	} else if bid != request.Amount {
+		t.Fatalf("unexpected bid: got %d instead of %d", bid, request.Amount)
 	}
 
-	// The bidder field should track who placed the bid.
-	bidder, err := client.rdb.HGet(ctx, key, "bidder").Uint64()
-	if err != nil {
-		t.Fatal(err)
-	} else if bidder != bidRequest.BidderId {
-		t.Fatalf("unexpected bidder: got %d want %d", bidder, bidRequest.BidderId)
+	if bidder, err := client.rdb.HGet(ctx, key, "bidder").Uint64(); err != nil {
+		t.Fatal(err.Error())
+	} else if bidder != request.BidderId {
+		t.Fatalf("unexpected bidder: got %d instead of %d", bidder, request.BidderId)
 	}
 
-	// A bid event should have been appended after the initial sell event.
 	if n, err := client.rdb.XLen(ctx, StreamKey).Result(); err != nil {
-		t.Fatal(err)
-	} else if n < 2 {
-		t.Fatalf("expected bid event to be appended to the stream, got %d entries", n)
+		t.Fatal(err.Error())
+	} else if n != 1 {
+		t.Fatalf("expected bid event, got %d stream entries", n)
+	}
+}
+
+func TestBidLow(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	server := miniredis.RunT(t)
+	client := NewClient(&redis.Options{
+		Addr: server.Addr(),
+	})
+	defer client.Close()
+
+	request := pb.BidRequest{
+		ItemId:   1,
+		BidderId: 2,
+		Amount:   100,
+	}
+
+	key := ListingKey(request.ItemId)
+
+	client.rdb.HSet(ctx, key, Listing{
+		Item:      1,
+		Seller:    1,
+		Bid:       40_000,
+		Bidder:    3,
+		CreatedAt: "",
+		ExpiresAt: "",
+		Active:    true,
+	})
+
+	if success, err := client.Bid(ctx, &request); err != nil {
+		t.Fatal(err.Error())
+	} else if success {
+		t.Fatal("expected low bid to fail")
+	}
+}
+
+func TestBidInactive(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	server := miniredis.RunT(t)
+	client := NewClient(&redis.Options{
+		Addr: server.Addr(),
+	})
+	defer client.Close()
+
+	request := pb.BidRequest{
+		ItemId:   1,
+		BidderId: 2,
+		Amount:   100,
+	}
+
+	key := ListingKey(request.ItemId)
+
+	client.rdb.HSet(ctx, key, Listing{
+		Item:      1,
+		Seller:    1,
+		Bid:       0,
+		Bidder:    0,
+		CreatedAt: "",
+		ExpiresAt: "",
+		Active:    false,
+	})
+
+	if success, err := client.Bid(ctx, &request); err != nil {
+		t.Fatal(err.Error())
+	} else if success {
+		t.Fatal("expected bid on inactive listing to fail")
+	}
+}
+
+func TestBidMissing(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	server := miniredis.RunT(t)
+	client := NewClient(&redis.Options{
+		Addr: server.Addr(),
+	})
+	defer client.Close()
+
+	request := pb.BidRequest{
+		ItemId:   1,
+		BidderId: 2,
+		Amount:   100,
+	}
+
+	if success, err := client.Bid(ctx, &request); err != nil {
+		t.Fatal(err.Error())
+	} else if success {
+		t.Fatal("expected bid on nonexistent listing to fail")
 	}
 }
 
@@ -135,66 +243,135 @@ func TestCancel(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	// Set up a dummy Redis instance for the test.
 	server := miniredis.RunT(t)
 	client := NewClient(&redis.Options{
 		Addr: server.Addr(),
 	})
 	defer client.Close()
 
-	// Create and initialize an active listing.
-	sellRequest := pb.SellRequest{
+	request := pb.CancelRequest{
 		ItemId:   1,
 		SellerId: 1,
-		Duration: uint64(time.Duration(time.Hour).Milliseconds()),
-	}
-	start, end := util.DurationTimestamps(sellRequest.Duration)
-	success, err := client.Sell(ctx, &sellRequest, start, end)
-	if err != nil {
-		t.Fatal(err)
-	} else if !success {
-		t.Fatal("failed to sell an item")
 	}
 
-	// Place a bid so the cancel event can capture the current bid state.
-	bidRequest := pb.BidRequest{
-		ItemId:   sellRequest.ItemId,
-		BidderId: 2,
-		Amount:   100,
-	}
-	success, err = client.Bid(ctx, &bidRequest)
-	if err != nil {
-		t.Fatal(err)
+	key := ListingKey(request.ItemId)
+
+	client.rdb.HSet(ctx, key, Listing{
+		Item:      1,
+		Seller:    1,
+		Bid:       0,
+		Bidder:    0,
+		CreatedAt: "",
+		ExpiresAt: "",
+		Active:    true,
+	})
+
+	if success, err := client.Cancel(ctx, &request); err != nil {
+		t.Fatal(err.Error())
 	} else if !success {
-		t.Fatal("failed to place a bid")
+		t.Fatal("failed to cancel a listing")
 	}
 
-	// Cancel the listing and verify the operation succeeds.
-	cancelRequest := pb.CancelRequest{
-		ItemId:   sellRequest.ItemId,
-		SellerId: sellRequest.SellerId,
-	}
-	success, err = client.Cancel(ctx, &cancelRequest)
-	if err != nil {
-		t.Fatal(err)
-	} else if !success {
-		t.Fatal("failed to cancel listing")
-	}
-
-	// Cancellation should mark the listing inactive, not delete it.
-	key := ListingKey(cancelRequest.ItemId)
-	active, err := client.rdb.HGet(ctx, key, "active").Bool()
-	if err != nil {
-		t.Fatal(err)
+	if active, err := client.rdb.HGet(ctx, key, "active").Bool(); err != nil {
+		t.Fatal(err.Error())
 	} else if active {
-		t.Fatal("listing should have been marked inactive")
+		t.Fatal("listing should be marked inactive")
 	}
 
-	// A cancel event should have been appended after the sell and bid events.
 	if n, err := client.rdb.XLen(ctx, StreamKey).Result(); err != nil {
-		t.Fatal(err)
-	} else if n < 3 {
-		t.Fatalf("expected cancel event to be appended to the stream, got %d entries", n)
+		t.Fatal(err.Error())
+	} else if n != 1 {
+		t.Fatalf("expected cancel event, got %d stream entries", n)
+	}
+}
+
+func TestCancelInactive(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	server := miniredis.RunT(t)
+	client := NewClient(&redis.Options{
+		Addr: server.Addr(),
+	})
+	defer client.Close()
+
+	request := pb.CancelRequest{
+		ItemId:   1,
+		SellerId: 1,
+	}
+
+	key := ListingKey(request.ItemId)
+
+	client.rdb.HSet(ctx, key, Listing{
+		Item:      1,
+		Seller:    1,
+		Bid:       0,
+		Bidder:    0,
+		CreatedAt: "",
+		ExpiresAt: "",
+		Active:    false,
+	})
+
+	if success, err := client.Cancel(ctx, &request); err != nil {
+		t.Fatal(err.Error())
+	} else if success {
+		t.Fatal("expected cancel on inactive listing to fail")
+	}
+}
+
+func TestCancelMissing(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	server := miniredis.RunT(t)
+	client := NewClient(&redis.Options{
+		Addr: server.Addr(),
+	})
+	defer client.Close()
+
+	cancelRequest := pb.CancelRequest{
+		ItemId:   1,
+		SellerId: 1,
+	}
+
+	if success, err := client.Cancel(ctx, &cancelRequest); err != nil {
+		t.Fatal(err.Error())
+	} else if success {
+		t.Fatal("expected cancel on nonexistent listing to fail")
+	}
+}
+
+func TestCancelUnauthorized(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	server := miniredis.RunT(t)
+	client := NewClient(&redis.Options{
+		Addr: server.Addr(),
+	})
+	defer client.Close()
+
+	request := pb.CancelRequest{
+		ItemId:   1,
+		SellerId: 2,
+	}
+
+	key := ListingKey(request.ItemId)
+
+	client.rdb.HSet(ctx, key, Listing{
+		Item:      1,
+		Seller:    1,
+		Bid:       0,
+		Bidder:    0,
+		CreatedAt: "",
+		ExpiresAt: "",
+		Active:    true,
+	})
+
+	if success, err := client.Cancel(ctx, &request); err != nil {
+		t.Fatal(err.Error())
+	} else if success {
+		t.Fatal("expected unauthorized cancel to fail")
 	}
 }
 
@@ -202,66 +379,103 @@ func TestExpire(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	// Set up an isolated Redis instance for the test.
 	server := miniredis.RunT(t)
 	client := NewClient(&redis.Options{
 		Addr: server.Addr(),
 	})
 	defer client.Close()
 
-	// Create and initialize an active listing.
-	sellRequest := pb.SellRequest{
-		ItemId:   1,
-		SellerId: 1,
-		Duration: uint64(time.Duration(time.Hour).Milliseconds()),
-	}
-	start, end := util.DurationTimestamps(sellRequest.Duration)
-	success, err := client.Sell(ctx, &sellRequest, start, end)
-	if err != nil {
-		t.Fatal(err)
-	} else if !success {
-		t.Fatal("failed to sell an item")
+	key := ListingKey(1)
+
+	client.rdb.HSet(ctx, key, Listing{
+		Item:      1,
+		Seller:    1,
+		Bid:       0,
+		Bidder:    0,
+		CreatedAt: "",
+		ExpiresAt: "",
+		Active:    true,
+	})
+
+	if err := client.Expire(ctx, 1); err != nil {
+		t.Fatal(err.Error())
 	}
 
-	// Place a bid so expiration can record a sold listing.
-	bidRequest := pb.BidRequest{
-		ItemId:   sellRequest.ItemId,
-		BidderId: 2,
-		Amount:   100,
-	}
-	success, err = client.Bid(ctx, &bidRequest)
-	if err != nil {
-		t.Fatal(err)
-	} else if !success {
-		t.Fatal("failed to place a bid")
-	}
-
-	// Expire the listing and ensure the operation succeeds.
-	if err := client.Expire(ctx, sellRequest.ItemId); err != nil {
-		t.Fatal(err)
-	}
-
-	// Expiration should remove the listing hash entirely.
-	key := ListingKey(sellRequest.ItemId)
-	exists, err := client.rdb.Exists(ctx, key).Result()
-	if err != nil {
-		t.Fatal(err)
+	if exists, err := client.rdb.Exists(ctx, key).Result(); err != nil {
+		t.Fatal(err.Error())
 	} else if exists != 0 {
-		t.Fatal("listing should have been deleted")
+		t.Fatal("listing should be deleted")
 	}
 
-	// Expiration should also remove the listing from the recent-listings set.
 	if _, err := client.rdb.ZScore(ctx, SortedSetKey, key).Result(); err != redis.Nil {
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Fatal("listing key should have been removed from the sorted set")
+		t.Fatal("listing key should be removed from the sorted set")
+	} else if err != nil && err != redis.Nil {
+		t.Fatal(err.Error())
 	}
 
-	// An expire event should have been appended after the sell and bid events.
 	if n, err := client.rdb.XLen(ctx, StreamKey).Result(); err != nil {
-		t.Fatal(err)
-	} else if n < 3 {
-		t.Fatalf("expected expire event to be appended to the stream, got %d entries", n)
+		t.Fatal(err.Error())
+	} else if n != 1 {
+		t.Fatalf("expected expire, got %d stream entries", n)
+	}
+}
+
+func TestExpireInactive(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	server := miniredis.RunT(t)
+	client := NewClient(&redis.Options{
+		Addr: server.Addr(),
+	})
+	defer client.Close()
+
+	key := ListingKey(1)
+
+	client.rdb.HSet(ctx, key, Listing{
+		Item:      1,
+		Seller:    1,
+		Bid:       0,
+		Bidder:    0,
+		CreatedAt: "",
+		ExpiresAt: "",
+		Active:    false,
+	})
+
+	if err := client.Expire(ctx, 1); err != nil {
+		t.Error("expected expire to return nil for inactive listings")
+	}
+
+	if exists, err := client.rdb.Exists(ctx, key).Result(); err != nil {
+		t.Fatal(err.Error())
+	} else if exists != 0 {
+		t.Fatal("inactive listing should be deleted on expire")
+	}
+
+	if _, err := client.rdb.ZScore(ctx, SortedSetKey, key).Result(); err != redis.Nil {
+		t.Fatal("inactive listing should be removed from the sorted set")
+	} else if err != nil && err != redis.Nil {
+		t.Fatal(err.Error())
+	}
+
+	if n, err := client.rdb.XLen(ctx, StreamKey).Result(); err != nil {
+		t.Fatal(err.Error())
+	} else if n != 1 {
+		t.Fatalf("expected expire event for inactive listing, got %d stream entries", n)
+	}
+}
+
+func TestExpireMissing(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	server := miniredis.RunT(t)
+	client := NewClient(&redis.Options{
+		Addr: server.Addr(),
+	})
+	defer client.Close()
+
+	if err := client.Expire(ctx, 1); err != NotFoundErr {
+		t.Error("expected expire to return NotFoundErr for nonexistent listings")
 	}
 }

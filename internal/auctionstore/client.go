@@ -53,8 +53,7 @@ func (c *Client) Sell(
 	// transaction function that stops execution when a watched key is changed
 	txf := func(tx *redis.Tx) error {
 		// ensure the listing doesn't exist
-		exists, err := tx.Exists(ctx, key).Result()
-		if err != nil {
+		if exists, err := tx.Exists(ctx, key).Result(); err != nil {
 			return err
 		} else if exists > 0 {
 			return AlreadyExistsErr
@@ -124,13 +123,34 @@ func (c *Client) Bid(ctx context.Context, bidRequest *pb.BidRequest) (bool, erro
 
 	// transaction function that stops execution when a watched key is changed
 	txf := func(tx *redis.Tx) error {
+		// check if the listing exists
+		if exists, err := tx.Exists(ctx, key).Result(); err != nil {
+			return err
+		} else if exists == 0 {
+			return NotFoundErr
+		}
+
+		// check if the listing is active
+		if active, err := tx.HGet(ctx, key, "active").Bool(); err != nil {
+			return err
+		} else if !active {
+			return InactiveErr
+		}
+
 		// ensure the new bid is higher than the current bid
 		currentBid, err := tx.HGet(ctx, key, "bid").Uint64()
 		if err != nil {
 			return err
-		}
-		if !(bidRequest.Amount > currentBid) {
+		} else if !(bidRequest.Amount > currentBid) {
 			return LowBidErr
+		}
+
+		// block self bids
+		bidderID, err := tx.HGet(ctx, key, "bidder").Uint64()
+		if err != nil {
+			return err
+		} else if bidRequest.BidderId == bidderID {
+			return UnauthorizedErr
 		}
 
 		// transactional pipeline for executing multiple commands in a single read/write:
@@ -150,7 +170,7 @@ func (c *Client) Bid(ctx context.Context, bidRequest *pb.BidRequest) (bool, erro
 
 	// watch the listing key and execute the transactional function
 	if err := c.rdb.Watch(ctx, txf, key); err != nil {
-		if err == LowBidErr {
+		if err == LowBidErr || err == InactiveErr || err == UnauthorizedErr || err == NotFoundErr {
 			return false, nil
 		} else {
 			return false, err
@@ -166,15 +186,28 @@ func (c *Client) Cancel(ctx context.Context, cancelRequest *pb.CancelRequest) (b
 
 	// transaction function that stops execution when a watched key is changed
 	txf := func(tx *redis.Tx) error {
+		// check if the listing exists
+		if exists, err := tx.Exists(ctx, key).Result(); err != nil {
+			return err
+		} else if exists == 0 {
+			return NotFoundErr
+		}
+
 		// check if the listing is active
-		active, err := tx.HGet(ctx, key, "active").Bool()
-		if err != nil {
+		if active, err := tx.HGet(ctx, key, "active").Bool(); err != nil {
 			return err
 		} else if !active {
 			return InactiveErr
 		}
 
-		// get the current bid and the user holding it
+		// check if the user is authorized to cancel the bid
+		if sellerID, err := tx.HGet(ctx, key, "seller").Uint64(); err != nil {
+			return err
+		} else if cancelRequest.SellerId != sellerID {
+			return UnauthorizedErr
+		}
+
+		// get the current bid and bidder
 		bid, err := tx.HGet(ctx, key, "bid").Uint64()
 		if err != nil {
 			return err
@@ -216,7 +249,7 @@ func (c *Client) Cancel(ctx context.Context, cancelRequest *pb.CancelRequest) (b
 
 	// watch the listing key and execute the transactional function
 	if err := c.rdb.Watch(ctx, txf, key); err != nil {
-		if err == InactiveErr {
+		if err == InactiveErr || err == UnauthorizedErr || err == NotFoundErr {
 			return false, nil
 		} else {
 			return false, err
@@ -232,12 +265,13 @@ func (c *Client) Expire(ctx context.Context, itemID uint64) error {
 
 	// transaction function that stops execution when a watched key is changed
 	txf := func(tx *redis.Tx) error {
-		// check if the listing is active
-		exists, err := tx.Exists(ctx, key).Result()
-		if err != nil {
-			return nil // already deleted or doesn't exist; there is nothing to do
-		} else if exists == 0 {
+		// check if the listing is exists
+		if exists, err := tx.Exists(ctx, key).Result(); err == redis.Nil {
+			return nil // already deleted; there is nothing to do
+		} else if err != nil {
 			return err
+		} else if exists == 0 {
+			return NotFoundErr
 		}
 
 		// get the current bid, the highest bidder, and the seller
