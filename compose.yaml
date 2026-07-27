@@ -6,16 +6,26 @@ services:
             - isolated
         volumes:
             - nats_jetstream:/data
+        healthcheck:
+            test:
+                - CMD-SHELL
+                - >
+                    wget -qO- --server-response http://localhost:8222/healthz 2>&1 |
+                    grep -q 'HTTP/1.1 200 OK'
+            interval: 10s
+            timeout: 1s
+            start_period: 5s
 
     redis:
         image: redis:8-alpine
+        command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
         volumes:
             - redis_data:/data
         networks:
             - isolated
         healthcheck:
             test: ["CMD", "redis-cli", "ping"]
-            interval: 1m
+            interval: 10s
             timeout: 1s
             start_period: 5s
 
@@ -33,7 +43,7 @@ services:
             REDIS_ADDRESS: "redis:6379"
         depends_on:
             nats:
-                condition: service_started
+                condition: service_healthy
             redis:
                 condition: service_healthy
         networks:
@@ -47,7 +57,7 @@ services:
             REDIS_ADDRESS: "redis:6379"
         depends_on:
             nats:
-                condition: service_started
+                condition: service_healthy
             redis:
                 condition: service_healthy
             expire-worker:
@@ -63,7 +73,7 @@ services:
             REDIS_ADDRESS: "redis:6379"
         depends_on:
             nats:
-                condition: service_started
+                condition: service_healthy
             redis:
                 condition: service_healthy
             expire-worker:
@@ -79,7 +89,7 @@ services:
             REDIS_ADDRESS: "redis:6379"
         depends_on:
             nats:
-                condition: service_started
+                condition: service_healthy
             redis:
                 condition: service_healthy
             expire-worker:
@@ -97,7 +107,7 @@ services:
             REDIS_ADDRESS: "redis:6379"
         depends_on:
             nats:
-                condition: service_started
+                condition: service_healthy
             redis:
                 condition: service_healthy
             expire-worker:
