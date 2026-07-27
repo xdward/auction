@@ -5,7 +5,10 @@ import (
 	"os"
 
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
+	"github.com/redis/go-redis/v9"
 	"github.com/xdward/auction/internal/service"
+	"github.com/xdward/auction/internal/service/db"
 )
 
 func main() {
@@ -21,44 +24,39 @@ func main() {
 	task := flag.String("task", "", "event to handle: sell, bid, cancel, expire")
 	flag.Parse()
 
-	w := service.Worker{}
+	nc, err := nats.Connect(natsAddress)
+	if err != nil {
+		panic(err)
+	}
+	defer nc.Drain()
+
+	js, err := jetstream.New(nc)
+	if err != nil {
+		panic(err)
+	}
+
+	rdb := db.NewClient(&redis.Options{
+		Addr:     redisAddress,
+		Password: "",
+		DB:       0,
+	})
+	defer rdb.Close()
+
+	w := service.Worker{
+		NATS: nc,
+		JS:   js,
+		DB:   rdb,
+	}
 
 	switch *task {
 	case "sell":
-		service.NewQueueSubscriber(
-			&w,
-			natsAddress,
-			redisAddress,
-			"event.sell",
-			"sell-workers",
-			w.HandleSell,
-		)
+		service.NewQueueSubscriber(&w, "event.sell", "sell-workers", w.HandleSell)
 	case "bid":
-		service.NewQueueSubscriber(
-			&w,
-			natsAddress,
-			redisAddress,
-			"event.bid",
-			"bid-workers",
-			w.HandleBid,
-		)
+		service.NewQueueSubscriber(&w, "event.bid", "bid-workers", w.HandleBid)
 	case "cancel":
-		service.NewQueueSubscriber(
-			&w,
-			natsAddress,
-			redisAddress,
-			"event.cancel",
-			"cancel-workers",
-			w.HandleCancel,
-		)
+		service.NewQueueSubscriber(&w, "event.cancel", "cancel-workers", w.HandleCancel)
 	case "expire":
-		service.NewScheduleConsumer(
-			&w,
-			natsAddress,
-			redisAddress,
-			"expire",
-			w.HandleExpire,
-		)
+		service.NewScheduleConsumer(&w, "expire", w.HandleExpire)
 	default:
 		panic("invalid --task (must be: sell, bid, cancel, expire)")
 	}
