@@ -36,11 +36,15 @@ func (c *Client) Sell(
 ) (bool, error) {
 	key := ListingKey(sellRequest.ItemId) // listing key
 
-	// serialize event data; it will stored in the appended stream entry
-	encodedEvent, err := proto.Marshal(&pb.SellEvent{
-		ItemId:     sellRequest.ItemId,
-		SellerId:   sellRequest.SellerId,
-		Expiration: end.Format(time.RFC3339),
+	// serialize event data; it will be stored in the appended stream entry
+	encodedEvent, err := proto.Marshal(&pb.EventStreamResponse{
+		Event: &pb.EventStreamResponse_SellEvent{
+			SellEvent: &pb.SellEvent{
+				ItemId:     sellRequest.ItemId,
+				SellerId:   sellRequest.SellerId,
+				Expiration: end.Format(time.RFC3339),
+			},
+		},
 	})
 	if err != nil {
 		return false, err
@@ -81,7 +85,7 @@ func (c *Client) Sell(
 				VersionKey,
 				StreamKey,
 				VersionToEntryPrefix,
-			}, SellEvent, encodedEvent)
+			}, encodedEvent)
 			return nil
 		})
 
@@ -104,11 +108,15 @@ func (c *Client) Sell(
 func (c *Client) Bid(ctx context.Context, bidRequest *pb.BidRequest) (bool, error) {
 	key := ListingKey(bidRequest.ItemId) // listing key
 
-	// serialize event data; it will stored in the appended stream entry
-	entry, err := proto.Marshal(&pb.BidEvent{
-		ItemId:   bidRequest.ItemId,
-		BidderId: bidRequest.BidderId,
-		Amount:   bidRequest.Amount,
+	// serialize event data; it will be stored in the appended stream entry
+	entry, err := proto.Marshal(&pb.EventStreamResponse{
+		Event: &pb.EventStreamResponse_BidEvent{
+			BidEvent: &pb.BidEvent{
+				ItemId:   bidRequest.ItemId,
+				BidderId: bidRequest.BidderId,
+				Amount:   bidRequest.Amount,
+			},
+		},
 	})
 	if err != nil {
 		return false, err
@@ -133,7 +141,7 @@ func (c *Client) Bid(ctx context.Context, bidRequest *pb.BidRequest) (bool, erro
 		// 		c) store the stream index to read updates from
 		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
 			pipe.HSet(ctx, key, "bid", bidRequest.Amount, "bidder", bidRequest.BidderId)
-			pipe.Eval(ctx, UpdateScript, UpdateScriptKeys, BidEvent, entry)
+			pipe.Eval(ctx, UpdateScript, UpdateScriptKeys, entry)
 			return nil
 		})
 
@@ -176,12 +184,16 @@ func (c *Client) Cancel(ctx context.Context, cancelRequest *pb.CancelRequest) (b
 			return err
 		}
 
-		// serialize event data; it will stored in the appended stream entry
-		entry, err := proto.Marshal(&pb.CancelEvent{
-			ItemId:   cancelRequest.ItemId,
-			SellerId: cancelRequest.SellerId,
-			BidderId: bidderID,
-			Amount:   bid,
+		// serialize event data; it will be stored in the appended stream entry
+		entry, err := proto.Marshal(&pb.EventStreamResponse{
+			Event: &pb.EventStreamResponse_CancelEvent{
+				CancelEvent: &pb.CancelEvent{
+					ItemId:   cancelRequest.ItemId,
+					SellerId: cancelRequest.SellerId,
+					BidderId: bidderID,
+					Amount:   bid,
+				},
+			},
 		})
 		if err != nil {
 			return err
@@ -195,7 +207,7 @@ func (c *Client) Cancel(ctx context.Context, cancelRequest *pb.CancelRequest) (b
 		// 		c) store the stream index to read updates from
 		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
 			pipe.HSet(ctx, key, "active", false)
-			pipe.Eval(ctx, UpdateScript, UpdateScriptKeys, CancelEvent, entry)
+			pipe.Eval(ctx, UpdateScript, UpdateScriptKeys, entry)
 			return nil
 		})
 
@@ -242,13 +254,17 @@ func (c *Client) Expire(ctx context.Context, itemID uint64) error {
 			return err
 		}
 
-		// serialize event data; it will stored in the appended stream entry
-		entry, err := proto.Marshal(&pb.ExpireEvent{
-			ItemId:   itemID,
-			Sold:     bid > 0,
-			SellerId: sellerID,
-			BidderId: bidderID,
-			Amount:   bid,
+		// serialize event data; it will be stored in the appended stream entry
+		entry, err := proto.Marshal(&pb.EventStreamResponse{
+			Event: &pb.EventStreamResponse_ExpireEvent{
+				ExpireEvent: &pb.ExpireEvent{
+					ItemId:   itemID,
+					Sold:     bid > 0,
+					SellerId: sellerID,
+					BidderId: bidderID,
+					Amount:   bid,
+				},
+			},
 		})
 		if err != nil {
 			return err
@@ -263,7 +279,7 @@ func (c *Client) Expire(ctx context.Context, itemID uint64) error {
 		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
 			pipe.Del(ctx, key)
 			pipe.ZRem(ctx, SortedSetKey, key)
-			pipe.Eval(ctx, UpdateScript, UpdateScriptKeys, ExpireEvent, entry)
+			pipe.Eval(ctx, UpdateScript, UpdateScriptKeys, entry)
 			return nil
 		})
 

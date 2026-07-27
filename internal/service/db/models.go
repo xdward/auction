@@ -8,11 +8,6 @@ const (
 	VersionKey           = "auction:version"
 	StreamKey            = "auction:stream:events"
 	VersionToEntryPrefix = "auction:version_to_id:"
-
-	SellEvent   = "sell_event"
-	BidEvent    = "bid_event"
-	CancelEvent = "cancel_event"
-	ExpireEvent = "expire_event"
 )
 
 type Listing struct {

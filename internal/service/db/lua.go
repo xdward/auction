@@ -32,8 +32,7 @@ local versionToStreamKey = KEYS[3]
 
 local newVersion = redis.call('INCR', versionKey)
 local streamEntryID = redis.call('XADD', streamKey, '*',
-	'event', ARGV[1],
-	'data',  ARGV[2],
+	'data',  ARGV[1],
 	'version', newVersion
 )
 
