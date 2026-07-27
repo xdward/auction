@@ -14,7 +14,6 @@ import (
 )
 
 func main() {
-	// retrieve environment variables
 	port, ok := os.LookupEnv("GRPC_SERVER_PORT")
 	if !ok {
 		port = "50051"
@@ -28,37 +27,30 @@ func main() {
 		redisAddress = "localhost:6379"
 	}
 
-	// create network socket
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
-	if err != nil {
-		panic(err)
-	}
-
-	// create server
-	s := grpc.NewServer()
-
-	// open nats connection
-	nc, err := nats.Connect(natsAddress)
+	nc, err := nats.Connect(natsAddress, nats.Token(os.Getenv("NATS_TOKEN")))
 	if err != nil {
 		panic(err)
 	}
 	defer nc.Drain()
 
-	// create redis client
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     redisAddress,
-		Password: "", // no password parameter
-		DB:       0,  // use default db
+		Password: os.Getenv("REDIS_PASS"),
+		DB:       0,
 	})
 	defer rdb.Close()
 
-	// register service
+	s := grpc.NewServer()
 	pb.RegisterAuctionServiceServer(s, &server.Server{
 		NATS:  nc,
 		Redis: rdb,
 	})
 
-	// start server
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
+	if err != nil {
+		panic(err)
+	}
+
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 	slog.Info(fmt.Sprintf("server listening at %s", lis.Addr()))
 	if err := s.Serve(lis); err != nil {

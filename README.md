@@ -52,6 +52,13 @@ See the [contracts](https://github.com/xdward/auction-contracts) repository for 
 
 ## Local Development
 
+Setup `.env` with the following variables:
+
+```
+REDIS_PASS=***
+NATS_TOKEN=***
+```
+
 Start the service:
 
 ```bash

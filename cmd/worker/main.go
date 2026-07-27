@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -31,7 +32,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	nc, err := nats.Connect(natsAddress)
+	nc, err := nats.Connect(natsAddress, nats.Token(os.Getenv("NATS_TOKEN")))
 	if err != nil {
 		panic(err)
 	}
@@ -44,7 +45,7 @@ func main() {
 
 	store := auctionstore.NewClient(&redis.Options{
 		Addr:     redisAddress,
-		Password: "",
+		Password: os.Getenv("REDIS_PASS"),
 		DB:       0,
 	})
 	defer store.Close()
@@ -54,6 +55,8 @@ func main() {
 		JS:           js,
 		AuctionStore: store,
 	}
+
+	slog.SetLogLoggerLevel(slog.LevelDebug)
 
 	switch *task {
 	case "sell":

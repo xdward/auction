@@ -1,24 +1,28 @@
 services:
     nats:
         image: nats:alpine
-        command: ["--jetstream", "--store_dir", "/data", "--http_port", "8222"]
+        env_file: .env
+        command: --jetstream --store_dir /data --http_port 8222 --auth ${NATS_TOKEN}
         networks:
             - isolated
         volumes:
             - nats_jetstream:/data
         healthcheck:
             test:
-                - CMD-SHELL
-                - >
-                    wget -qO- --server-response http://localhost:8222/healthz 2>&1 |
-                    grep -q 'HTTP/1.1 200 OK'
+                [
+                    "CMD-SHELL",
+                    "wget -qO- --server-response http://localhost:8222/healthz 2>&1",
+                    "|",
+                    "grep -q 'HTTP/1.1 200 OK'",
+                ]
             interval: 10s
             timeout: 1s
             start_period: 5s
 
     redis:
         image: redis:8-alpine
-        command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+        env_file: .env
+        command: redis-server --appendonly yes --appendfsync everysec --requirepass ${REDIS_PASS}
         volumes:
             - redis_data:/data
         networks:
@@ -37,10 +41,11 @@ services:
             context: .
             target: worker
         image: auction-worker:latest
-        command: ["--task", "expire"]
+        env_file: .env
+        command: --task expire
         environment:
-            NATS_ADDRESS: "nats:4222"
-            REDIS_ADDRESS: "redis:6379"
+            NATS_ADDRESS: nats:4222
+            REDIS_ADDRESS: redis:6379
         depends_on:
             nats:
                 condition: service_healthy
@@ -51,10 +56,11 @@ services:
 
     sell-worker:
         image: auction-worker:latest
-        command: ["--task", "sell"]
+        env_file: .env
+        command: --task sell
         environment:
-            NATS_ADDRESS: "nats:4222"
-            REDIS_ADDRESS: "redis:6379"
+            NATS_ADDRESS: nats:4222
+            REDIS_ADDRESS: redis:6379
         depends_on:
             nats:
                 condition: service_healthy
@@ -67,10 +73,11 @@ services:
 
     bid-worker:
         image: auction-worker:latest
-        command: ["--task", "bid"]
+        env_file: .env
+        command: --task bid
         environment:
-            NATS_ADDRESS: "nats:4222"
-            REDIS_ADDRESS: "redis:6379"
+            NATS_ADDRESS: nats:4222
+            REDIS_ADDRESS: redis:6379
         depends_on:
             nats:
                 condition: service_healthy
@@ -83,10 +90,11 @@ services:
 
     cancel-worker:
         image: auction-worker:latest
-        command: ["--task", "cancel"]
+        env_file: .env
+        command: --task cancel
         environment:
-            NATS_ADDRESS: "nats:4222"
-            REDIS_ADDRESS: "redis:6379"
+            NATS_ADDRESS: nats:4222
+            REDIS_ADDRESS: redis:6379
         depends_on:
             nats:
                 condition: service_healthy
@@ -102,9 +110,10 @@ services:
             context: .
             target: server
         image: auction-server:latest
+        env_file: .env
         environment:
-            NATS_ADDRESS: "nats:4222"
-            REDIS_ADDRESS: "redis:6379"
+            NATS_ADDRESS: nats:4222
+            REDIS_ADDRESS: redis:6379
         depends_on:
             nats:
                 condition: service_healthy
