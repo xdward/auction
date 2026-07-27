@@ -22,6 +22,12 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     go build -ldflags "-s -w" -o server -v ./cmd/server
 
+#### Test Stage ####
+
+FROM build-stage AS test-stage
+
+RUN go test -v ./...
+
 #### Release Stage ####
 
 FROM gcr.io/distroless/static-debian12:nonroot-amd64 AS worker

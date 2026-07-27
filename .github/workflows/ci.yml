@@ -1,0 +1,34 @@
+name: CI
+
+on:
+    workflow_dispatch:
+    push:
+        branches:
+            - main
+        paths-ignore:
+            - '.gitignore'
+            - 'Dockerfile'
+            - 'compose.yml'
+            - 'README.md'
+    pull_request:
+        branches:
+            - main
+            - dev
+        paths-ignore:
+            - '.gitignore'
+            - 'Dockerfile'
+            - 'compose.yml'
+            - 'README.md'
+
+jobs:
+    test:
+        name: Test
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-go@v5
+              with:
+                  go-version-file: go.mod
+                  cache: true
+            - run: go mod download
+            - run: go test ./...
