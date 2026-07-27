@@ -20,7 +20,6 @@ func TestUpdateScriptDirect(t *testing.T) {
 	rdb := redis.NewClient(&redis.Options{
 		Addr: server.Addr(),
 	})
-	defer rdb.Close()
 
 	entry := []byte("payload")
 

@@ -19,7 +19,6 @@ func TestSell(t *testing.T) {
 	client := NewClient(&redis.Options{
 		Addr: server.Addr(),
 	})
-	defer client.Close()
 
 	request := pb.SellRequest{
 		ItemId:   1,
@@ -64,7 +63,6 @@ func TestSellDuplicate(t *testing.T) {
 	client := NewClient(&redis.Options{
 		Addr: server.Addr(),
 	})
-	defer client.Close()
 
 	request := pb.SellRequest{
 		ItemId:   1,
@@ -101,7 +99,6 @@ func TestBid(t *testing.T) {
 	client := NewClient(&redis.Options{
 		Addr: server.Addr(),
 	})
-	defer client.Close()
 
 	request := pb.BidRequest{
 		ItemId:   1,
@@ -154,7 +151,6 @@ func TestBidLow(t *testing.T) {
 	client := NewClient(&redis.Options{
 		Addr: server.Addr(),
 	})
-	defer client.Close()
 
 	request := pb.BidRequest{
 		ItemId:   1,
@@ -189,7 +185,6 @@ func TestBidInactive(t *testing.T) {
 	client := NewClient(&redis.Options{
 		Addr: server.Addr(),
 	})
-	defer client.Close()
 
 	request := pb.BidRequest{
 		ItemId:   1,
@@ -224,7 +219,6 @@ func TestBidMissing(t *testing.T) {
 	client := NewClient(&redis.Options{
 		Addr: server.Addr(),
 	})
-	defer client.Close()
 
 	request := pb.BidRequest{
 		ItemId:   1,
@@ -247,7 +241,6 @@ func TestCancel(t *testing.T) {
 	client := NewClient(&redis.Options{
 		Addr: server.Addr(),
 	})
-	defer client.Close()
 
 	request := pb.CancelRequest{
 		ItemId:   1,
@@ -293,7 +286,6 @@ func TestCancelInactive(t *testing.T) {
 	client := NewClient(&redis.Options{
 		Addr: server.Addr(),
 	})
-	defer client.Close()
 
 	request := pb.CancelRequest{
 		ItemId:   1,
@@ -327,7 +319,6 @@ func TestCancelMissing(t *testing.T) {
 	client := NewClient(&redis.Options{
 		Addr: server.Addr(),
 	})
-	defer client.Close()
 
 	cancelRequest := pb.CancelRequest{
 		ItemId:   1,
@@ -349,7 +340,6 @@ func TestCancelUnauthorized(t *testing.T) {
 	client := NewClient(&redis.Options{
 		Addr: server.Addr(),
 	})
-	defer client.Close()
 
 	request := pb.CancelRequest{
 		ItemId:   1,
@@ -383,7 +373,6 @@ func TestExpire(t *testing.T) {
 	client := NewClient(&redis.Options{
 		Addr: server.Addr(),
 	})
-	defer client.Close()
 
 	key := ListingKey(1)
 
@@ -428,7 +417,6 @@ func TestExpireInactive(t *testing.T) {
 	client := NewClient(&redis.Options{
 		Addr: server.Addr(),
 	})
-	defer client.Close()
 
 	key := ListingKey(1)
 
@@ -473,7 +461,6 @@ func TestExpireMissing(t *testing.T) {
 	client := NewClient(&redis.Options{
 		Addr: server.Addr(),
 	})
-	defer client.Close()
 
 	if err := client.Expire(ctx, 1); err != NotFoundErr {
 		t.Error("expected expire to return NotFoundErr for nonexistent listings")

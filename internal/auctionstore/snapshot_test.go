@@ -19,7 +19,6 @@ func TestGetSnapshot(t *testing.T) {
 	client := NewClient(&redis.Options{
 		Addr: server.Addr(),
 	})
-	defer client.Close()
 
 	sellRequest := pb.SellRequest{
 		ItemId:   1,
@@ -79,7 +78,6 @@ func TestGetSnapshotEmpty(t *testing.T) {
 	client := NewClient(&redis.Options{
 		Addr: server.Addr(),
 	})
-	defer client.Close()
 
 	snapshot, err := GetSnapshot(ctx, client.rdb)
 	if err != nil {
@@ -103,7 +101,6 @@ func TestGenSnapshotInactiveFilter(t *testing.T) {
 	client := NewClient(&redis.Options{
 		Addr: server.Addr(),
 	})
-	defer client.Close()
 
 	sellRequest := pb.SellRequest{
 		ItemId:   1,
