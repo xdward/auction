@@ -17,7 +17,7 @@ import (
 func (w *Worker) HandleSell(msg *nats.Msg) {
 	slog.Debug("received message")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
 	// deserialize the protobuf request stored in the nats message
@@ -39,20 +39,22 @@ func (w *Worker) HandleSell(msg *nats.Msg) {
 		return
 	}
 
-	// create a scheduled nats message for expiration
-	scheduleMsg, err := BuildScheduleMessage(sellRequest.ItemId, end)
-	if err != nil {
-		slog.Error(err.Error())
-		msg.Respond([]byte(err.Error()))
-		return
-	}
+	if success {
+		// create a scheduled nats message for expiration
+		scheduleMsg, err := BuildScheduleMessage(sellRequest.ItemId, end)
+		if err != nil {
+			slog.Error(err.Error())
+			msg.Respond([]byte(err.Error()))
+			return
+		}
 
-	// publish the schedule
-	_, err = w.JS.PublishMsg(ctx, scheduleMsg)
-	if err != nil {
-		slog.Error(err.Error())
-		msg.Respond([]byte(err.Error()))
-		return
+		// publish the schedule
+		_, err = w.JS.PublishMsg(ctx, scheduleMsg)
+		if err != nil {
+			slog.Error(err.Error())
+			msg.Respond([]byte(err.Error()))
+			return
+		}
 	}
 
 	// reply to the nats request with the serialized protobuf response
@@ -74,7 +76,7 @@ func (w *Worker) HandleSell(msg *nats.Msg) {
 func (w *Worker) HandleBid(msg *nats.Msg) {
 	slog.Debug("received message")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
 	// deserialize the protobuf request stored in the nats message
@@ -112,7 +114,7 @@ func (w *Worker) HandleBid(msg *nats.Msg) {
 func (w *Worker) HandleCancel(msg *nats.Msg) {
 	slog.Debug("received message")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
 	// deserialize the protobuf request stored in the nats message
@@ -150,7 +152,7 @@ func (w *Worker) HandleCancel(msg *nats.Msg) {
 func (w *Worker) HandleExpire(msg jetstream.Msg) {
 	slog.Debug("received message")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
 	// decode the schedule data from the nats message
