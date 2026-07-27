@@ -33,7 +33,7 @@ func (w *Worker) HandleSell(msg *nats.Msg) {
 	start, end := util.DurationTimestamps(sellRequest.Duration)
 
 	// perform the auction sell action
-	success, err := w.DB.Sell(ctx, &sellRequest, start, end)
+	success, err := w.AuctionStore.Sell(ctx, &sellRequest, start, end)
 	if err != nil {
 		slog.Error(err.Error())
 		msg.Respond([]byte(err.Error()))
@@ -89,7 +89,7 @@ func (w *Worker) HandleBid(msg *nats.Msg) {
 	}
 
 	// perform the auction bid action
-	success, err := w.DB.Bid(ctx, &bidRequest)
+	success, err := w.AuctionStore.Bid(ctx, &bidRequest)
 	if err != nil {
 		slog.Error(err.Error())
 		msg.Respond([]byte(err.Error()))
@@ -127,7 +127,7 @@ func (w *Worker) HandleCancel(msg *nats.Msg) {
 	}
 
 	// perform the auction cancel action
-	success, err := w.DB.Cancel(ctx, &cancelRequest)
+	success, err := w.AuctionStore.Cancel(ctx, &cancelRequest)
 	if err != nil {
 		slog.Error(err.Error())
 		msg.Respond([]byte(err.Error()))
@@ -165,7 +165,7 @@ func (w *Worker) HandleExpire(msg jetstream.Msg) {
 	}
 
 	// perform the auction expire action
-	err := w.DB.Expire(ctx, scheduleData.ItemID)
+	err := w.AuctionStore.Expire(ctx, scheduleData.ItemID)
 	if err != nil {
 		slog.Error(err.Error())
 		// don't nak as it will either:

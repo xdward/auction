@@ -1,4 +1,4 @@
-package db
+package auctionstore
 
 import "errors"
 

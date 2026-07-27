@@ -1,4 +1,4 @@
-package db
+package auctionstore
 
 const SnapshotScript = `
 local sortedSetKey = KEYS[1]

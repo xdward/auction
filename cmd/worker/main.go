@@ -10,9 +10,9 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/redis/go-redis/v9"
+	"github.com/xdward/auction/internal/auctionstore"
 	"github.com/xdward/auction/internal/messaging"
 	"github.com/xdward/auction/internal/service"
-	"github.com/xdward/auction/internal/service/db"
 )
 
 func main() {
@@ -42,17 +42,17 @@ func main() {
 		panic(err)
 	}
 
-	rdb := db.NewClient(&redis.Options{
+	store := auctionstore.NewClient(&redis.Options{
 		Addr:     redisAddress,
 		Password: "",
 		DB:       0,
 	})
-	defer rdb.Close()
+	defer store.Close()
 
 	w := service.Worker{
-		NATS: nc,
-		JS:   js,
-		DB:   rdb,
+		NATS:         nc,
+		JS:           js,
+		AuctionStore: store,
 	}
 
 	switch *task {

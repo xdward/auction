@@ -7,7 +7,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	pb "github.com/xdward/auction-contracts/gen/go"
-	"github.com/xdward/auction/internal/service/db"
+	"github.com/xdward/auction/internal/auctionstore"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -121,7 +121,7 @@ func (s *Server) EventStream(_ *emptypb.Empty, stream pb.AuctionService_EventStr
 	ctx := stream.Context()
 
 	// send an initial snapshot and capture the current version
-	snapshot, err := db.GetSnapshot(ctx, s.Redis)
+	snapshot, err := auctionstore.GetSnapshot(ctx, s.Redis)
 	if err != nil {
 		slog.Error(err.Error())
 		return status.Error(codes.Internal, "failed to get snapshot")
@@ -138,7 +138,7 @@ func (s *Server) EventStream(_ *emptypb.Empty, stream pb.AuctionService_EventStr
 	}
 
 	// resolve the stream cursor from the snapshot version
-	cursor, err := s.Redis.Get(ctx, db.VersionToEntryPrefix+snapshot.Version).Result()
+	cursor, err := s.Redis.Get(ctx, auctionstore.VersionToEntryPrefix+snapshot.Version).Result()
 	if err == redis.Nil {
 		cursor = "0-0"
 	} else if err != nil {

@@ -6,7 +6,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	pb "github.com/xdward/auction-contracts/gen/go"
-	"github.com/xdward/auction/internal/service/db"
+	"github.com/xdward/auction/internal/auctionstore"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -23,7 +23,7 @@ func (s *Server) streamEvents(
 		}
 
 		streams, err := s.Redis.XRead(ctx, &redis.XReadArgs{
-			Streams: []string{db.StreamKey, cursor},
+			Streams: []string{auctionstore.StreamKey, cursor},
 			Count:   10,
 			Block:   0,
 		}).Result()
