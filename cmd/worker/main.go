@@ -9,14 +9,29 @@ import (
 	"syscall"
 
 	"github.com/nats-io/nats.go"
-	"github.com/nats-io/nats.go/jetstream"
 	"github.com/redis/go-redis/v9"
 	"github.com/xdward/auction/internal/auctionstore"
-	"github.com/xdward/auction/internal/messaging"
 	"github.com/xdward/auction/internal/service"
 )
 
+var (
+	natsToken     = os.Getenv("NATS_TOKEN")
+	redisPassword = os.Getenv("REDIS_PASS")
+	deployment    = os.Getenv("STAGE")
+
+	task = flag.String("task", "", "event to handle: sell, bid, cancel, expire")
+)
+
 func main() {
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	flag.Parse()
+
+	if !(deployment == "prod" || deployment == "stage") {
+		slog.SetLogLoggerLevel(slog.LevelDebug)
+	}
+
 	natsAddress, ok := os.LookupEnv("NATS_ADDRESS")
 	if !ok {
 		natsAddress = nats.DefaultURL
@@ -26,60 +41,57 @@ func main() {
 		redisAddress = "localhost:6379"
 	}
 
-	task := flag.String("task", "", "event to handle: sell, bid, cancel, expire")
-	flag.Parse()
+	store := auctionstore.NewClient(&redis.Options{
+		Addr:     redisAddress,
+		Password: redisPassword,
+		DB:       0,
+	})
+	defer store.Close()
 
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
-
-	nc, err := nats.Connect(natsAddress, nats.Token(os.Getenv("NATS_TOKEN")))
+	nc, err := nats.Connect(natsAddress, nats.Token(natsToken))
 	if err != nil {
 		panic(err)
 	}
 	defer nc.Drain()
 
-	js, err := jetstream.New(nc)
-	if err != nil {
-		panic(err)
-	}
-
-	store := auctionstore.NewClient(&redis.Options{
-		Addr:     redisAddress,
-		Password: os.Getenv("REDIS_PASS"),
-		DB:       0,
-	})
-	defer store.Close()
-
-	w := service.Worker{
-		NATS:         nc,
-		JS:           js,
-		AuctionStore: store,
-	}
-
-	slog.SetLogLoggerLevel(slog.LevelDebug)
-
 	switch *task {
 	case "sell":
-		err = messaging.RunQueueSubscriber(ctx, nc, "event.sell", "sell-workers", w.HandleSell)
-		if err != nil && err != context.Canceled {
+		_, err = service.RegisterQueueSubscriber(
+			nc,
+			"event.sell",
+			"sell.workers",
+			service.SellHandler(store, nc),
+		)
+		if err != nil {
 			panic(err)
 		}
 	case "bid":
-		err = messaging.RunQueueSubscriber(ctx, nc, "event.bid", "bid-workers", w.HandleBid)
-		if err != nil && err != context.Canceled {
+		_, err := service.RegisterQueueSubscriber(
+			nc,
+			"event.bid",
+			"bid.workers",
+			service.BidHandler(store),
+		)
+		if err != nil {
 			panic(err)
 		}
 	case "cancel":
-		err = messaging.RunQueueSubscriber(ctx, nc, "event.cancel", "cancel-workers", w.HandleCancel)
-		if err != nil && err != context.Canceled {
+		_, err := service.RegisterQueueSubscriber(nc,
+			"event.cancel",
+			"cancel.workers",
+			service.CancelHandler(store),
+		)
+		if err != nil {
 			panic(err)
 		}
 	case "expire":
-		err = messaging.RunScheduleConsumer(ctx, js, "expire", w.HandleExpire)
-		if err != nil && err != context.Canceled {
+		_, err := service.RegisterScheduleConsumer(ctx, nc, service.ExpireHandler(store))
+		if err != nil {
 			panic(err)
 		}
 	default:
 		panic("invalid --task (must be: sell, bid, cancel, expire)")
 	}
+
+	<-ctx.Done()
 }

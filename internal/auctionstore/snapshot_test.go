@@ -45,7 +45,7 @@ func TestGetSnapshot(t *testing.T) {
 		t.Fatal("failed to place a bid")
 	}
 
-	snapshot, err := GetSnapshot(ctx, client.rdb)
+	snapshot, _, err := client.GetSnapshot(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestGetSnapshotEmpty(t *testing.T) {
 		Addr: server.Addr(),
 	})
 
-	snapshot, err := GetSnapshot(ctx, client.rdb)
+	snapshot, _, err := client.GetSnapshot(ctx)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -126,7 +126,7 @@ func TestGenSnapshotInactiveFilter(t *testing.T) {
 		t.Fatal("failed to place a bid")
 	}
 
-	snapshot, err := GetSnapshot(ctx, client.rdb)
+	snapshot, _, err := client.GetSnapshot(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -3,124 +3,61 @@ package server
 import (
 	"context"
 	"log/slog"
-	"time"
 
 	"github.com/nats-io/nats.go"
-	"github.com/redis/go-redis/v9"
 	pb "github.com/xdward/auction-contracts/gen/go"
 	"github.com/xdward/auction/internal/auctionstore"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-// Implementation of the AuctionService server.
+// AuctionServiceServer implements the AuctionService gRPC server.
 type Server struct {
-	// Embedded for forward compatability.
+	// Embedded to satisfy forward compatibility with future RPC additions.
 	pb.UnimplementedAuctionServiceServer
 
-	NATS  *nats.Conn    // Shared NATS connection.
-	Redis *redis.Client // Shared Redis client.
+	NATS         *nats.Conn           // Shared NATS connection.
+	AuctionStore *auctionstore.Client // Shared AuctionStore client.
 }
 
-// Sell forwards a sell request to NATS and returns the response.
+// Sell validates a sell request and forwards it to the sell event handler.
 func (s *Server) Sell(ctx context.Context, req *pb.SellRequest) (*pb.SellResponse, error) {
 	if req.ItemId == 0 || req.SellerId == 0 || req.Duration == 0 {
 		return nil, status.Error(codes.InvalidArgument, "all fields must be nonzero")
 	}
 
-	// serialize the protobuf request
-	payload, err := proto.Marshal(req)
-	if err != nil {
-		slog.Error(err.Error())
-		return nil, status.Error(codes.InvalidArgument, "malformed request")
-	}
-
-	// forward the request to NATS
-	responseMsg, err := s.NATS.Request("event.sell", payload, time.Second)
-	if err != nil {
-		slog.Error(err.Error())
-		return nil, status.Error(codes.Unavailable, "service unavailable")
-	}
-
-	// deserialize the NATS reply into the protobuf response and return it
 	var res pb.SellResponse
-	if err := proto.Unmarshal(responseMsg.Data, &res); err != nil {
-		if len(responseMsg.Data) > 0 {
-			slog.Error("worker: " + string(responseMsg.Data))
-		} else {
-			slog.Error(err.Error())
-		}
-		return nil, status.Error(codes.Internal, "failed to handle message")
+	if err := natsRequestReply(s.NATS, "event.sell", req, &res); err != nil {
+		return nil, err
 	}
 
 	return &res, nil
 }
 
-// Bid forwards a bid request to NATS and returns the response.
+// Bid validates a bid request and forwards it to the bid event handler.
 func (s *Server) Bid(ctx context.Context, req *pb.BidRequest) (*pb.BidResponse, error) {
 	if req.ItemId == 0 || req.BidderId == 0 || req.Amount == 0 {
 		return nil, status.Error(codes.InvalidArgument, "all fields must be nonzero")
 	}
 
-	// serialize the protobuf request
-	payload, err := proto.Marshal(req)
-	if err != nil {
-		slog.Error(err.Error())
-		return nil, status.Error(codes.InvalidArgument, "malformed request")
-	}
-
-	// forward the request to NATS
-	responseMsg, err := s.NATS.Request("event.bid", payload, time.Second)
-	if err != nil {
-		slog.Error(err.Error())
-		return nil, status.Error(codes.Unavailable, "service unavailable")
-	}
-
-	// deserialize the NATS reply into the protobuf response and return it
 	var res pb.BidResponse
-	if err := proto.Unmarshal(responseMsg.Data, &res); err != nil {
-		if len(responseMsg.Data) > 0 {
-			slog.Error("worker: " + string(responseMsg.Data))
-		} else {
-			slog.Error(err.Error())
-		}
-		return nil, status.Error(codes.Internal, "failed to handle message")
+	if err := natsRequestReply(s.NATS, "event.bid", req, &res); err != nil {
+		return nil, err
 	}
 
 	return &res, nil
 }
 
-// Cancel forwards a cancel request to NATS and returns the response.
+// Cancel validates a cancel request and forwards it to the cancel event handler.
 func (s *Server) Cancel(ctx context.Context, req *pb.CancelRequest) (*pb.CancelResponse, error) {
 	if req.ItemId == 0 || req.SellerId == 0 {
 		return nil, status.Error(codes.InvalidArgument, "all fields must be nonzero")
 	}
 
-	// serialize the protobuf request
-	payload, err := proto.Marshal(req)
-	if err != nil {
-		slog.Error(err.Error())
-		return nil, status.Error(codes.InvalidArgument, "malformed request")
-	}
-
-	// forward the request to NATS
-	responseMsg, err := s.NATS.Request("event.cancel", payload, time.Second)
-	if err != nil {
-		slog.Error(err.Error())
-		return nil, status.Error(codes.Unavailable, "service unavailable")
-	}
-
-	// deserialize the NATS reply into the protobuf response and return it
 	var res pb.CancelResponse
-	if err := proto.Unmarshal(responseMsg.Data, &res); err != nil {
-		if len(responseMsg.Data) > 0 {
-			slog.Error("worker: " + string(responseMsg.Data))
-		} else {
-			slog.Error(err.Error())
-		}
-		return nil, status.Error(codes.Internal, "failed to handle message")
+	if err := natsRequestReply(s.NATS, "event.cancel", req, &res); err != nil {
+		return nil, err
 	}
 
 	return &res, nil
@@ -128,32 +65,53 @@ func (s *Server) Cancel(ctx context.Context, req *pb.CancelRequest) (*pb.CancelR
 
 // EventStream streams the current snapshot and subsequent auction events.
 func (s *Server) EventStream(_ *emptypb.Empty, stream pb.AuctionService_EventStreamServer) error {
-	ctx := stream.Context()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	// send an initial snapshot and capture the current version
-	snapshot, err := auctionstore.GetSnapshot(ctx, s.Redis)
+	snapshot, cursorPtr, err := s.AuctionStore.GetSnapshot(ctx)
 	if err != nil {
-		slog.Error(err.Error())
+		slog.Error("failed to get snapshot",
+			slog.String("error", err.Error()),
+		)
 		return status.Error(codes.Internal, "failed to get snapshot")
 	}
 
-	err = stream.Send(&pb.EventStreamResponse{
+	snapshotResposne := &pb.EventStreamResponse{
 		Event: &pb.EventStreamResponse_Snapshot{
 			Snapshot: snapshot,
 		},
-	})
+	}
 
-	if err != nil {
+	if err := stream.Send(snapshotResposne); err != nil {
+		slog.Error("failed to send snapshot",
+			slog.String("error", err.Error()),
+			slog.Group("snapshot",
+				slog.Int("size", len(snapshot.Listings)),
+			),
+		)
 		return status.Error(codes.Internal, "failed to send snapshot")
 	}
 
-	// resolve the stream cursor from the snapshot version
-	cursor, err := s.Redis.Get(ctx, auctionstore.VersionToEntryPrefix+snapshot.Version).Result()
-	if err == redis.Nil {
-		cursor = "0-0"
-	} else if err != nil {
-		return status.Error(codes.Internal, "failed to get stream cursor")
-	}
+	for {
+		events, newCursorPtr, err := s.AuctionStore.BatchReadStream(ctx, 10, *cursorPtr)
+		if err != nil {
+			slog.Error("failed to read event stream",
+				slog.String("error", err.Error()),
+				slog.String("cursor", *newCursorPtr),
+			)
+			return status.Error(codes.Internal, "failed to read event stream")
+		}
 
-	return s.streamEvents(ctx, stream, cursor)
+		for _, e := range events {
+			if err := stream.Send(e); err != nil {
+				slog.Error("failed to send stream message",
+					slog.String("error", err.Error()),
+					slog.Any("message", e),
+				)
+				return status.Error(codes.Internal, "failed to send stream message")
+			}
+		}
+
+		cursorPtr = newCursorPtr
+	}
 }
