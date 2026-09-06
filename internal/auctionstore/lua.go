@@ -1,6 +1,6 @@
 package auctionstore
 
-// SnapshotScript reads the active listings from Redis and returns them as JSON, along with the
+// SnapshotScript reads the current listings from Redis and returns them as JSON, along with the
 // current store version.
 const SnapshotScript = `
 local sortedSetKey = KEYS[1]
@@ -10,7 +10,7 @@ local listingKeys = redis.call('ZRANGE', sortedSetKey, 0, -1)
 local listings = {}
 for i=1, #listingKeys do
 	local key = listingKeys[i]
-	if redis.call('HGET', key, 'active') == '1' then
+	if redis.call('EXISTS', key) == 1 then
 		listings[#listings+1] = {
 			item_id = tonumber(redis.call('HGET', key, 'item')),
 			current_bid = tonumber(redis.call('HGET', key, 'bid')),

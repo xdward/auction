@@ -79,7 +79,6 @@ func TestSellDuplicate(t *testing.T) {
 		Bidder:    0,
 		CreatedAt: "",
 		ExpiresAt: "",
-		Active:    true,
 	})
 
 	start, end := util.DurationTimestamps(request.Duration)
@@ -115,7 +114,6 @@ func TestBid(t *testing.T) {
 		Bidder:    0,
 		CreatedAt: "",
 		ExpiresAt: "",
-		Active:    true,
 	})
 
 	if success, err := client.Bid(ctx, &request); err != nil {
@@ -167,7 +165,6 @@ func TestBidLow(t *testing.T) {
 		Bidder:    3,
 		CreatedAt: "",
 		ExpiresAt: "",
-		Active:    true,
 	})
 
 	if success, err := client.Bid(ctx, &request); err != nil {
@@ -201,13 +198,16 @@ func TestBidInactive(t *testing.T) {
 		Bidder:    0,
 		CreatedAt: "",
 		ExpiresAt: "",
-		Active:    false,
 	})
+
+	if err := client.rdb.Del(ctx, key).Err(); err != nil {
+		t.Fatal(err.Error())
+	}
 
 	if success, err := client.Bid(ctx, &request); err != nil {
 		t.Fatal(err.Error())
 	} else if success {
-		t.Fatal("expected bid on inactive listing to fail")
+		t.Fatal("expected bid on deleted listing to fail")
 	}
 }
 
@@ -256,7 +256,6 @@ func TestCancel(t *testing.T) {
 		Bidder:    0,
 		CreatedAt: "",
 		ExpiresAt: "",
-		Active:    true,
 	})
 
 	if success, err := client.Cancel(ctx, &request); err != nil {
@@ -265,10 +264,16 @@ func TestCancel(t *testing.T) {
 		t.Fatal("failed to cancel a listing")
 	}
 
-	if active, err := client.rdb.HGet(ctx, key, "active").Bool(); err != nil {
+	if exists, err := client.rdb.Exists(ctx, key).Result(); err != nil {
 		t.Fatal(err.Error())
-	} else if active {
-		t.Fatal("listing should be marked inactive")
+	} else if exists != 0 {
+		t.Fatal("listing should be deleted after cancel")
+	}
+
+	if cancelled, err := client.rdb.SIsMember(ctx, CancelledSetKey, "1").Result(); err != nil {
+		t.Fatal(err.Error())
+	} else if !cancelled {
+		t.Fatal("listing should be recorded in the cancelled set")
 	}
 
 	if n, err := client.rdb.XLen(ctx, StreamKey).Result(); err != nil {
@@ -301,8 +306,11 @@ func TestCancelInactive(t *testing.T) {
 		Bidder:    0,
 		CreatedAt: "",
 		ExpiresAt: "",
-		Active:    false,
 	})
+
+	if err := client.rdb.Del(ctx, key).Err(); err != nil {
+		t.Fatal(err.Error())
+	}
 
 	if success, err := client.Cancel(ctx, &request); err != nil {
 		t.Fatal(err.Error())
@@ -355,7 +363,6 @@ func TestCancelUnauthorized(t *testing.T) {
 		Bidder:    0,
 		CreatedAt: "",
 		ExpiresAt: "",
-		Active:    true,
 	})
 
 	if success, err := client.Cancel(ctx, &request); err != nil {
@@ -383,7 +390,6 @@ func TestExpire(t *testing.T) {
 		Bidder:    0,
 		CreatedAt: "",
 		ExpiresAt: "",
-		Active:    true,
 	})
 
 	if err := client.Expire(ctx, 1); err != nil {
@@ -427,29 +433,42 @@ func TestExpireInactive(t *testing.T) {
 		Bidder:    0,
 		CreatedAt: "",
 		ExpiresAt: "",
-		Active:    false,
 	})
 
+	if err := client.rdb.Del(ctx, key).Err(); err != nil {
+		t.Fatal(err.Error())
+	}
+
+	if err := client.rdb.SAdd(ctx, CancelledSetKey, "1").Err(); err != nil {
+		t.Fatal(err.Error())
+	}
+
 	if err := client.Expire(ctx, 1); err != nil {
-		t.Error("expected expire to return nil for inactive listings")
+		t.Error("expected expire to return nil for cancelled listings")
 	}
 
 	if exists, err := client.rdb.Exists(ctx, key).Result(); err != nil {
 		t.Fatal(err.Error())
 	} else if exists != 0 {
-		t.Fatal("inactive listing should be deleted on expire")
+		t.Fatal("cancelled listing should be deleted on expire")
 	}
 
 	if _, err := client.rdb.ZScore(ctx, SortedSetKey, key).Result(); err != redis.Nil {
-		t.Fatal("inactive listing should be removed from the sorted set")
+		t.Fatal("cancelled listing should be removed from the sorted set")
 	} else if err != nil && err != redis.Nil {
 		t.Fatal(err.Error())
 	}
 
+	if cancelled, err := client.rdb.SIsMember(ctx, CancelledSetKey, "1").Result(); err != nil {
+		t.Fatal(err.Error())
+	} else if cancelled {
+		t.Fatal("cancelled listing should be pruned from the cancelled set")
+	}
+
 	if n, err := client.rdb.XLen(ctx, StreamKey).Result(); err != nil {
 		t.Fatal(err.Error())
-	} else if n != 1 {
-		t.Fatalf("expected expire event for inactive listing, got %d stream entries", n)
+	} else if n != 0 {
+		t.Fatalf("expected no expire event for cancelled listing, got %d stream entries", n)
 	}
 }
 

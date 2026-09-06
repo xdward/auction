@@ -2,6 +2,7 @@ package auctionstore
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -100,7 +101,6 @@ func (c *Client) Sell(
 				Bidder:    0,
 				CreatedAt: start.Format(time.RFC3339),
 				ExpiresAt: end.Format(time.RFC3339),
-				Active:    true,
 			})
 			pipe.ZAdd(ctx, SortedSetKey, redis.Z{
 				Score:  float64(start.UnixMicro()),
@@ -166,13 +166,6 @@ func (c *Client) Bid(ctx context.Context, bidRequest *pb.BidRequest) (bool, erro
 			return NotFoundErr
 		}
 
-		// check if the listing is active
-		if active, err := tx.HGet(ctx, key, "active").Bool(); err != nil {
-			return err
-		} else if !active {
-			return InactiveErr
-		}
-
 		// ensure the new bid is higher than the current bid
 		currentBid, err := tx.HGet(ctx, key, "bid").Uint64()
 		if err != nil {
@@ -206,7 +199,7 @@ func (c *Client) Bid(ctx context.Context, bidRequest *pb.BidRequest) (bool, erro
 
 	// watch the listing key and execute the transactional function
 	if err := c.rdb.Watch(ctx, txf, key); err != nil {
-		if err == LowBidErr || err == InactiveErr || err == UnauthorizedErr || err == NotFoundErr {
+		if err == NotFoundErr || err == LowBidErr || err == UnauthorizedErr {
 			return false, nil
 		} else {
 			return false, err
@@ -216,11 +209,10 @@ func (c *Client) Bid(ctx context.Context, bidRequest *pb.BidRequest) (bool, erro
 	return true, nil
 }
 
-// Cancel marks an active listing as inactive.
+// Cancel cancels a listing.
 //
-// The auction state in Redis is updated to flag the item as cancelled, as long as the user is
-// authorized to make this transaction. In other words, the request must be the seller. Any relevant
-// information is streamed.
+// The auction state in Redis is updated to remove the listing hash, record the item in the
+// cancelled set, and stream the relevant information as long as the request comes from the seller.
 //
 // Redis transactions are used for consistency.
 func (c *Client) Cancel(ctx context.Context, cancelRequest *pb.CancelRequest) (bool, error) {
@@ -233,13 +225,6 @@ func (c *Client) Cancel(ctx context.Context, cancelRequest *pb.CancelRequest) (b
 			return err
 		} else if exists == 0 {
 			return NotFoundErr
-		}
-
-		// check if the listing is active
-		if active, err := tx.HGet(ctx, key, "active").Bool(); err != nil {
-			return err
-		} else if !active {
-			return InactiveErr
 		}
 
 		// check if the user is authorized to cancel the bid
@@ -275,13 +260,17 @@ func (c *Client) Cancel(ctx context.Context, cancelRequest *pb.CancelRequest) (b
 		}
 
 		// transactional pipeline for executing multiple commands in a single read/write:
-		// 	1) update the bid and bidder fields
-		// 	2) run the update script
+		// 	1) delete the listing hash
+		// 	2) remove the listing from the recent sorted set
+		// 	3) record the listing id in the cancelled set
+		// 	4) run the update script
 		// 		a) increment the version key
 		// 		b) add a new stream entry with the serialized event data
 		// 		c) store the stream index to read updates from
 		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
-			pipe.HSet(ctx, key, "active", false)
+			pipe.Del(ctx, key)
+			pipe.ZRem(ctx, SortedSetKey, key)
+			pipe.SAdd(ctx, CancelledSetKey, strconv.FormatUint(cancelRequest.ItemId, 10))
 			pipe.Eval(ctx, UpdateScript, updateScriptKeys, entry)
 			return nil
 		})
@@ -291,7 +280,7 @@ func (c *Client) Cancel(ctx context.Context, cancelRequest *pb.CancelRequest) (b
 
 	// watch the listing key and execute the transactional function
 	if err := c.rdb.Watch(ctx, txf, key); err != nil {
-		if err == InactiveErr || err == UnauthorizedErr || err == NotFoundErr {
+		if err == NotFoundErr || err == UnauthorizedErr {
 			return false, nil
 		} else {
 			return false, err
@@ -305,19 +294,31 @@ func (c *Client) Cancel(ctx context.Context, cancelRequest *pb.CancelRequest) (b
 //
 // The worker queue should invoke this function after receiving a scheduled message. It will either:
 //
-//   - Conclude the auction listing and stream relevant information, if it is active
-//   - Cleanup the auction listing and stream nothing, if it is inactive
+//   - Conclude the auction listing and stream relevant information, if it has not been cancelled
+//   - Prune a cancelled listing without streaming anything
 //
 // Redis transactions are used for consistency.
 func (c *Client) Expire(ctx context.Context, itemID uint64) error {
 	key := ListingKey(itemID) // listing key
+	cancelledID := strconv.FormatUint(itemID, 10)
 
 	// transaction function that stops execution when a watched key is changed
 	txf := func(tx *redis.Tx) error {
-		// check if the listing is exists
-		if exists, err := tx.Exists(ctx, key).Result(); err == redis.Nil {
-			return nil // already deleted; there is nothing to do
-		} else if err != nil {
+		// prune cancelled listings and exit without streaming anything
+		if cancelled, err := tx.SIsMember(ctx, CancelledSetKey, cancelledID).Result(); err != nil {
+			return err
+		} else if cancelled {
+			_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+				pipe.Del(ctx, key)
+				pipe.SRem(ctx, CancelledSetKey, cancelledID)
+				pipe.ZRem(ctx, SortedSetKey, key)
+				return nil
+			})
+			return err
+		}
+
+		// check if the listing exists
+		if exists, err := tx.Exists(ctx, key).Result(); err != nil {
 			return err
 		} else if exists == 0 {
 			return NotFoundErr
@@ -354,8 +355,9 @@ func (c *Client) Expire(ctx context.Context, itemID uint64) error {
 		}
 
 		// transactional pipeline for executing multiple commands in a single read/write:
-		// 	1) update the bid and bidder fields
-		// 	2) run the update script
+		// 	1) delete the listing hash
+		// 	2) remove the listing from the recent sorted set
+		// 	3) run the update script
 		// 		a) increment the version key
 		// 		b) add a new stream entry with the serialized event data
 		// 		c) store the stream index to read updates from
@@ -370,7 +372,7 @@ func (c *Client) Expire(ctx context.Context, itemID uint64) error {
 	}
 
 	// watch the listing key and execute the transactional function
-	if err := c.rdb.Watch(ctx, txf, key); err != nil {
+	if err := c.rdb.Watch(ctx, txf, key, CancelledSetKey); err != nil {
 		return err
 	}
 

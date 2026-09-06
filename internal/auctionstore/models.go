@@ -6,6 +6,7 @@ import "strconv"
 const (
 	ListingKeyPrefix     string = "auction:listing:"
 	SortedSetKey         string = "auction:listing:recent"
+	CancelledSetKey      string = "auction:listing:cancelled"
 	VersionKey           string = "auction:version"
 	StreamKey            string = "auction:stream:events"
 	VersionToEntryPrefix string = "auction:version_to_id:"
@@ -19,7 +20,6 @@ type Listing struct {
 	Bidder    uint64 `redis:"bidder"`
 	CreatedAt string `redis:"created_at"`
 	ExpiresAt string `redis:"expires_at"`
-	Active    bool   `redis:"active"`
 }
 
 // ListingKey returns the Redis key for a listing ID.
