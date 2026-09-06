@@ -174,7 +174,7 @@ func TestBidLow(t *testing.T) {
 	}
 }
 
-func TestBidInactive(t *testing.T) {
+func TestBidCancelled(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
@@ -283,7 +283,7 @@ func TestCancel(t *testing.T) {
 	}
 }
 
-func TestCancelInactive(t *testing.T) {
+func TestCancelTwice(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
@@ -315,7 +315,7 @@ func TestCancelInactive(t *testing.T) {
 	if success, err := client.Cancel(ctx, &request); err != nil {
 		t.Fatal(err.Error())
 	} else if success {
-		t.Fatal("expected cancel on inactive listing to fail")
+		t.Fatal("expected cancel on an already cancelled listing to fail")
 	}
 }
 
@@ -415,7 +415,7 @@ func TestExpire(t *testing.T) {
 	}
 }
 
-func TestExpireInactive(t *testing.T) {
+func TestExpireCancelled(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
