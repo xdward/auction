@@ -25,17 +25,20 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 #### Test Stage ####
 
 FROM build-stage AS test-stage
-
 RUN go test -v ./...
+
+FROM test-stage AS artifacts
+COPY --from=build-stage /app/worker /worker
+COPY --from=build-stage /app/server /server
 
 #### Release Stage ####
 
 FROM gcr.io/distroless/static-debian12:nonroot-amd64 AS worker
 WORKDIR /
-COPY --from=build-stage /app/worker /worker
+COPY --from=artifacts /worker /worker
 ENTRYPOINT ["/worker"]
 
 FROM gcr.io/distroless/static-debian12:nonroot-amd64 AS server
 WORKDIR /
-COPY --from=build-stage /app/server /server
+COPY --from=artifacts /server /server
 ENTRYPOINT ["/server"]
