@@ -197,7 +197,7 @@ func (c *Client) Bid(ctx context.Context, bidRequest *pb.BidRequest) (bool, erro
 		// 		c) store the stream index to read updates from
 		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
 			pipe.HSet(ctx, key, "bid", bidRequest.Amount, "bidder", bidRequest.BidderId)
-			pipe.Eval(ctx, UpdateScript, UpdateScriptKeys, entry)
+			pipe.Eval(ctx, UpdateScript, updateScriptKeys, entry)
 			return nil
 		})
 
@@ -282,7 +282,7 @@ func (c *Client) Cancel(ctx context.Context, cancelRequest *pb.CancelRequest) (b
 		// 		c) store the stream index to read updates from
 		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
 			pipe.HSet(ctx, key, "active", false)
-			pipe.Eval(ctx, UpdateScript, UpdateScriptKeys, entry)
+			pipe.Eval(ctx, UpdateScript, updateScriptKeys, entry)
 			return nil
 		})
 
@@ -362,7 +362,7 @@ func (c *Client) Expire(ctx context.Context, itemID uint64) error {
 		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
 			pipe.Del(ctx, key)
 			pipe.ZRem(ctx, SortedSetKey, key)
-			pipe.Eval(ctx, UpdateScript, UpdateScriptKeys, entry)
+			pipe.Eval(ctx, UpdateScript, updateScriptKeys, entry)
 			return nil
 		})
 

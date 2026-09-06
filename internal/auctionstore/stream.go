@@ -2,21 +2,18 @@ package auctionstore
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"log/slog"
 
 	"github.com/redis/go-redis/v9"
 	pb "github.com/xdward/auction-contracts/gen/go"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 )
 
+// decodeStreamData decodes the Redis stream's "data" field into raw bytes so the event payload can
+// be unmarshaled to a protobuf message.
 func decodeStreamData(msg *redis.XMessage) ([]byte, error) {
 	raw, ok := msg.Values["data"]
 	if !ok {
-		return nil, fmt.Errorf("missing data field")
+		return nil, StreamDataErr
 	}
 
 	switch data := raw.(type) {
@@ -25,10 +22,12 @@ func decodeStreamData(msg *redis.XMessage) ([]byte, error) {
 	case string:
 		return []byte(data), nil
 	default:
-		return nil, errors.New("failed to decode stream data")
+		return nil, StreamDecodeErr
 	}
 }
 
+// BatchReadStream reads N (batchSize) events from the stream starting at the provided cursor and
+// returns the decoded events with the next cursor value.
 func (c *Client) BatchReadStream(
 	ctx context.Context,
 	batchSize int64,
@@ -40,8 +39,7 @@ func (c *Client) BatchReadStream(
 		Block:   0,
 	}).Result()
 	if err != nil {
-		slog.Error(err.Error())
-		return nil, nil, status.Error(codes.Internal, "failed to read events")
+		return nil, nil, err
 	}
 
 	events := make([]*pb.EventStreamResponse, 0, batchSize)
@@ -56,11 +54,10 @@ func (c *Client) BatchReadStream(
 
 			var response pb.EventStreamResponse
 			if err := proto.Unmarshal(rawData, &response); err != nil {
-				return nil, nil, status.Error(codes.Internal, "failed to decode event")
+				return nil, nil, err
 			}
 
 			events = append(events, &response)
-
 			newCursor = msg.ID
 		}
 	}

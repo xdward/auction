@@ -1,5 +1,7 @@
 package auctionstore
 
+// SnapshotScript reads the active listings from Redis and returns them as JSON, along with the
+// current store version.
 const SnapshotScript = `
 local sortedSetKey = KEYS[1]
 local versionKey = KEYS[2]
@@ -25,6 +27,8 @@ end
 return { cjson.encode(listings), version }
 `
 
+// UpdateScript increments the version, appends a new event to the update stream, and stores a
+// new entry in the lookup table: the version mapped to the stream entry id.
 const UpdateScript = `
 local versionKey = KEYS[1]
 local streamKey = KEYS[2]
@@ -41,7 +45,18 @@ redis.call('SET', versionToStreamKey .. newVersion, streamEntryID)
 return { newVersion, streamEntryID }
 `
 
-var UpdateScriptKeys = []string{
+type listings []struct {
+	ItemId     uint64 `json:"item_id"`
+	CurrentBid uint64 `json:"current_bid"`
+	Expiration string `json:"expires_at"`
+}
+
+var snapshotScriptKeys = []string{
+	SortedSetKey,
+	VersionKey,
+}
+
+var updateScriptKeys = []string{
 	VersionKey,
 	StreamKey,
 	VersionToEntryPrefix,

@@ -23,7 +23,7 @@ func TestUpdateScriptDirect(t *testing.T) {
 
 	entry := []byte("payload")
 
-	out, err := redis.NewScript(UpdateScript).Run(ctx, rdb, UpdateScriptKeys, entry).Result()
+	out, err := redis.NewScript(UpdateScript).Run(ctx, rdb, updateScriptKeys, entry).Result()
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -2,14 +2,16 @@ package auctionstore
 
 import "strconv"
 
+// Redis key prefixes and shared keys used by the auction store.
 const (
-	ListingKeyPrefix     = "auction:listing:"
-	SortedSetKey         = "auction:listing:recent"
-	VersionKey           = "auction:version"
-	StreamKey            = "auction:stream:events"
-	VersionToEntryPrefix = "auction:version_to_id:"
+	ListingKeyPrefix     string = "auction:listing:"
+	SortedSetKey         string = "auction:listing:recent"
+	VersionKey           string = "auction:version"
+	StreamKey            string = "auction:stream:events"
+	VersionToEntryPrefix string = "auction:version_to_id:"
 )
 
+// Listing mirrors the Redis hash stored for each auction listing.
 type Listing struct {
 	Item      uint64 `redis:"item"`
 	Seller    uint64 `redis:"seller"`
@@ -20,6 +22,7 @@ type Listing struct {
 	Active    bool   `redis:"active"`
 }
 
+// ListingKey returns the Redis key for a listing ID.
 func ListingKey(id uint64) string {
 	return ListingKeyPrefix + strconv.FormatUint(id, 10)
 }

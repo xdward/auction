@@ -3,8 +3,6 @@ package auctionstore
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"log/slog"
 
 	"github.com/redis/go-redis/v9"
 	pb "github.com/xdward/auction-contracts/gen/go"
@@ -13,25 +11,18 @@ import (
 // GetSnapshot returns the current auction snapshot and version.
 func (c *Client) GetSnapshot(ctx context.Context) (*pb.Snapshot, *string, error) {
 	lua := redis.NewScript(SnapshotScript)
-	out, err := lua.Run(ctx, c.rdb, []string{SortedSetKey, VersionKey}).Result()
+	out, err := lua.Run(ctx, c.rdb, snapshotScriptKeys).Result()
 	if err != nil {
 		return nil, nil, err
 	}
 
 	// expect the script to return { listingsJSON, version }
-	result, ok := out.([]any)
-	if !ok || len(result) != 2 {
-		return nil, nil, RedisScriptErr
-	}
+	result := out.([]any)
 	listingsJSON := result[0].(string)
 	version := result[1].(string)
 
-	// parse listingsJSON into a slice of structs
-	var listings []struct {
-		ItemId     uint64 `json:"item_id"`
-		CurrentBid uint64 `json:"current_bid"`
-		Expiration string `json:"expires_at"`
-	}
+	// parse listingsJSON into a slice of listing structs
+	var listings listings
 	if listingsJSON != "{}" {
 		if err := json.Unmarshal([]byte(listingsJSON), &listings); err != nil {
 			return nil, nil, err
@@ -62,14 +53,7 @@ func (c *Client) GetSnapshot(ctx context.Context) (*pb.Snapshot, *string, error)
 	if err == redis.Nil {
 		cursor = "0-0"
 	} else if err != nil {
-		slog.Error("failed to get stream cursor",
-			slog.String("error", err.Error()),
-			slog.Group("snapshot",
-				slog.String("version", snapshot.Version),
-				slog.String("cursorKey", cursorKey),
-			),
-		)
-		return nil, nil, errors.New("failed to get stream cursor")
+		return nil, nil, err
 	}
 
 	return snapshot, &cursor, nil
