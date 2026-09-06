@@ -6,19 +6,18 @@ on:
         branches:
             - main
         paths-ignore:
-            - '.gitignore'
-            - 'Dockerfile'
-            - 'compose.yml'
-            - 'README.md'
+            - ".gitignore"
+            - "Dockerfile"
+            - "compose.yml"
+            - "README.md"
     pull_request:
         branches:
             - main
-            - dev
         paths-ignore:
-            - '.gitignore'
-            - 'Dockerfile'
-            - 'compose.yml'
-            - 'README.md'
+            - ".gitignore"
+            - "Dockerfile"
+            - "compose.yml"
+            - "README.md"
 
 jobs:
     test:
@@ -32,3 +31,13 @@ jobs:
                   cache: true
             - run: go mod download
             - run: go test ./...
+    gosec:
+        name: Code Analysis
+        runs-on: ubuntu-latest
+        env:
+            GO111MODULE: on
+        steps:
+            - uses: actions/checkout@v3
+            - uses: securego/gosec@master
+              with:
+                  args: ./...
