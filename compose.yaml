@@ -2,7 +2,7 @@ services:
     nats:
         image: nats:alpine
         env_file: .env
-        command: --jetstream --store_dir /data --http_port 8222 --auth ${NATS_TOKEN}
+        command: -js -sd /data -m 8222 --auth ${NATS_TOKEN}
         networks:
             - isolated
         volumes:

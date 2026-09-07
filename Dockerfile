@@ -25,7 +25,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 #### Test Stage ####
 
 FROM build-stage AS test-stage
-RUN go test -v ./...
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go test -v ./...
 
 FROM test-stage AS artifacts
 COPY --from=build-stage /app/worker /worker
