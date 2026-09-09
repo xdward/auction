@@ -52,15 +52,14 @@ See the [contracts](https://github.com/xdward/auction-contracts) repository for 
 
 ## Local Development
 
-Setup `.env` with the following variables:
+Run the command below to start the containers:
 
+```sh
+docker compose -p auction up -d --build
 ```
-REDIS_PASS=***
-NATS_TOKEN=***
-```
 
-Start the service:
+To stop the containers:
 
-```bash
-docker compose up -d --build
+```sh
+docker compose stop
 ```
