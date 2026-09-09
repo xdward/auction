@@ -15,9 +15,9 @@ import (
 )
 
 var (
-	natsToken     = os.Getenv("NATS_TOKEN")
-	redisPassword = os.Getenv("REDIS_PASS")
-	deployment    = os.Getenv("STAGE")
+	deployment   = os.Getenv("STAGE")
+	natsAddress  = os.Getenv("NATS_ADDRESS")
+	redisAddress = os.Getenv("REDIS_ADDRESS")
 
 	task = flag.String("task", "", "event to handle: sell, bid, cancel, expire")
 )
@@ -32,23 +32,14 @@ func main() {
 		slog.SetLogLoggerLevel(slog.LevelDebug)
 	}
 
-	natsAddress, ok := os.LookupEnv("NATS_ADDRESS")
-	if !ok {
-		natsAddress = nats.DefaultURL
-	}
-	redisAddress, ok := os.LookupEnv("REDIS_ADDRESS")
-	if !ok {
-		redisAddress = "localhost:6379"
-	}
-
 	store := auctionstore.NewClient(&redis.Options{
 		Addr:     redisAddress,
-		Password: redisPassword,
+		Password: "",
 		DB:       0,
 	})
 	defer store.Close()
 
-	nc, err := nats.Connect(natsAddress, nats.Token(natsToken))
+	nc, err := nats.Connect(natsAddress)
 	if err != nil {
 		panic(err)
 	}
