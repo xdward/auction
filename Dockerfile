@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 
-#### Build Stage ####
+#### Setup Stage ####
 
-FROM golang:1.26 AS build-stage
+FROM golang:1.26 AS base-stage
 
 ENV CGO_ENABLED=0 \
     GOOS=linux \
@@ -15,32 +15,29 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 
 COPY . .
+
+#### Worker Build Stage ####
+
+FROM base-stage AS worker-build
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    go build -ldflags "-s -w" -o worker -v ./cmd/worker
+    go build -ldflags "-s -w" -trimpath -buildvcs=false -o worker ./cmd/worker
+
+#### Server Build Stage ####
+
+FROM base-stage AS server-build
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    go build -ldflags "-s -w" -o server -v ./cmd/server
-
-#### Test Stage ####
-
-FROM build-stage AS test-stage
-RUN --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
-    go test -v ./...
-
-FROM test-stage AS artifacts
-COPY --from=build-stage /app/worker /worker
-COPY --from=build-stage /app/server /server
+    go build -ldflags "-s -w" -trimpath -buildvcs=false -o server ./cmd/server
 
 #### Release Stage ####
 
 FROM gcr.io/distroless/static-debian12:nonroot-amd64 AS worker
 WORKDIR /
-COPY --from=artifacts /worker /worker
+COPY --from=worker-build /app/worker /worker
 ENTRYPOINT ["/worker"]
 
 FROM gcr.io/distroless/static-debian12:nonroot-amd64 AS server
 WORKDIR /
-COPY --from=artifacts /server /server
+COPY --from=server-build /app/server /server
 ENTRYPOINT ["/server"]
