@@ -34,7 +34,11 @@ func SellHandler(auction *auctionstore.Client, nc *nats.Conn) func(msg *nats.Msg
 				slog.String("error", err.Error()),
 				slog.Any("data", msg.Data),
 			)
-			msg.Respond([]byte("error"))
+			if err := msg.Respond([]byte("error")); err != nil {
+				slog.Error("failed to send error response",
+					slog.String("nats_msg_response_error", err.Error()),
+				)
+			}
 			return
 		}
 
@@ -50,7 +54,11 @@ func SellHandler(auction *auctionstore.Client, nc *nats.Conn) func(msg *nats.Msg
 				slog.Time("start", start),
 				slog.Time("end", end),
 			)
-			msg.Respond([]byte("error"))
+			if err := msg.Respond([]byte("error")); err != nil {
+				slog.Error("failed to send error response",
+					slog.String("nats_msg_response_error", err.Error()),
+				)
+			}
 			return
 		}
 
@@ -63,7 +71,11 @@ func SellHandler(auction *auctionstore.Client, nc *nats.Conn) func(msg *nats.Msg
 					slog.Any("request", &sellRequest),
 					slog.Any("schedule", scheduleMsg),
 				)
-				msg.Respond([]byte("error"))
+				if err := msg.Respond([]byte("error")); err != nil {
+					slog.Error("failed to send error response",
+						slog.String("nats_msg_response_error", err.Error()),
+					)
+				}
 				return
 			}
 
@@ -75,7 +87,11 @@ func SellHandler(auction *auctionstore.Client, nc *nats.Conn) func(msg *nats.Msg
 					slog.Any("request", &sellRequest),
 					slog.Any("schedule", scheduleMsg),
 				)
-				msg.Respond([]byte("error"))
+				if err := msg.Respond([]byte("error")); err != nil {
+					slog.Error("failed to send error response",
+						slog.String("nats_msg_response_error", err.Error()),
+					)
+				}
 				return
 			}
 		}
@@ -91,10 +107,19 @@ func SellHandler(auction *auctionstore.Client, nc *nats.Conn) func(msg *nats.Msg
 				slog.Any("request", &sellRequest),
 				slog.Any("response", &sellResponse),
 			)
-			msg.Respond([]byte("error"))
+			if err := msg.Respond([]byte("error")); err != nil {
+				slog.Error("failed to send error response",
+					slog.String("nats_msg_response_error", err.Error()),
+				)
+			}
 			return
 		}
-		msg.Respond(replyMsg)
+		if err := msg.Respond(replyMsg); err != nil {
+			slog.Error("failed to send response",
+				slog.String("nats_msg_response_error", err.Error()),
+			)
+			return
+		}
 
 		slog.Debug("delivered response")
 	}
@@ -115,7 +140,11 @@ func BidHandler(auction *auctionstore.Client) func(msg *nats.Msg) {
 				slog.String("error", err.Error()),
 				slog.Any("data", msg.Data),
 			)
-			msg.Respond([]byte("error"))
+			if err := msg.Respond([]byte("error")); err != nil {
+				slog.Error("failed to send error response",
+					slog.String("nats_msg_response_error", err.Error()),
+				)
+			}
 			return
 		}
 
@@ -126,7 +155,11 @@ func BidHandler(auction *auctionstore.Client) func(msg *nats.Msg) {
 				slog.String("error", err.Error()),
 				slog.Any("request", &bidRequest),
 			)
-			msg.Respond([]byte("error"))
+			if err := msg.Respond([]byte("error")); err != nil {
+				slog.Error("failed to send error response",
+					slog.String("nats_msg_response_error", err.Error()),
+				)
+			}
 			return
 		}
 
@@ -141,10 +174,19 @@ func BidHandler(auction *auctionstore.Client) func(msg *nats.Msg) {
 				slog.Any("request", &bidRequest),
 				slog.Any("response", bidResponse),
 			)
-			msg.Respond([]byte("error"))
+			if err := msg.Respond([]byte("error")); err != nil {
+				slog.Error("failed to send error response",
+					slog.String("nats_msg_response_error", err.Error()),
+				)
+			}
 			return
 		}
-		msg.Respond(replyMsg)
+		if err := msg.Respond(replyMsg); err != nil {
+			slog.Error("failed to send response",
+				slog.String("nats_msg_response_error", err.Error()),
+			)
+			return
+		}
 
 		slog.Debug("delivered response")
 	}
@@ -165,7 +207,11 @@ func CancelHandler(auction *auctionstore.Client) func(msg *nats.Msg) {
 				slog.String("error", err.Error()),
 				slog.Any("data", msg.Data),
 			)
-			msg.Respond([]byte("error"))
+			if err := msg.Respond([]byte("error")); err != nil {
+				slog.Error("failed to send error response",
+					slog.String("nats_msg_response_error", err.Error()),
+				)
+			}
 			return
 		}
 
@@ -176,7 +222,11 @@ func CancelHandler(auction *auctionstore.Client) func(msg *nats.Msg) {
 				slog.String("error", err.Error()),
 				slog.Any("request", &cancelRequest),
 			)
-			msg.Respond([]byte("error"))
+			if err := msg.Respond([]byte("error")); err != nil {
+				slog.Error("failed to send error response",
+					slog.String("nats_msg_response_error", err.Error()),
+				)
+			}
 			return
 		}
 
@@ -191,10 +241,19 @@ func CancelHandler(auction *auctionstore.Client) func(msg *nats.Msg) {
 				slog.Any("request", &cancelRequest),
 				slog.Any("response", cancelResponse),
 			)
-			msg.Respond([]byte("error"))
+			if err := msg.Respond([]byte("error")); err != nil {
+				slog.Error("failed to send error response",
+					slog.String("nats_msg_response_error", err.Error()),
+				)
+			}
 			return
 		}
-		msg.Respond(replyMsg)
+		if err := msg.Respond(replyMsg); err != nil {
+			slog.Error("failed to send response",
+				slog.String("nats_msg_response_error", err.Error()),
+			)
+			return
+		}
 
 		slog.Debug("delivered response")
 	}
@@ -231,7 +290,10 @@ func ExpireHandler(auction *auctionstore.Client) func(msg jetstream.Msg) {
 			return
 		}
 
-		msg.Ack()
+		if err := msg.Ack(); err != nil {
+			slog.Error("failed to ack message")
+			return
+		}
 
 		slog.Debug("acknowledged message")
 	}

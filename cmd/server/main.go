@@ -46,7 +46,7 @@ func main() {
 		AuctionStore: store,
 	})
 
-	lis, err := net.Listen("tcp", ":50051")
+	lis, err := net.Listen("tcp", nats.DefaultURL)
 	if err != nil {
 		panic(err)
 	}
