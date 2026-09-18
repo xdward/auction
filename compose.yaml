@@ -10,9 +10,7 @@ services:
             test:
                 [
                     "CMD-SHELL",
-                    "wget -qO- --server-response http://localhost:8222/healthz 2>&1",
-                    "|",
-                    "grep -q 'HTTP/1.1 200 OK'",
+                    "wget -qO- --server-response http://localhost:8222/healthz 2>&1 | grep -q 'HTTP/1.1 200 OK'",
                 ]
             interval: 10s
             timeout: 1s
@@ -57,6 +55,7 @@ services:
         environment:
             NATS_ADDRESS: nats:4222
             REDIS_ADDRESS: redis:6379
+            GRPC_PORT: "50051"
         depends_on:
             nats:
                 condition: service_healthy
