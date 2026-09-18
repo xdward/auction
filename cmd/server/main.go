@@ -18,6 +18,7 @@ var (
 	deployment   = os.Getenv("STAGE")
 	natsAddress  = os.Getenv("NATS_ADDRESS")
 	redisAddress = os.Getenv("REDIS_ADDRESS")
+	grpcPort     = os.Getenv("GRPC_PORT")
 )
 
 func main() {
@@ -46,7 +47,7 @@ func main() {
 		AuctionStore: store,
 	})
 
-	lis, err := net.Listen("tcp", nats.DefaultURL)
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", grpcPort))
 	if err != nil {
 		panic(err)
 	}

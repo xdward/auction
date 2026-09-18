@@ -46,24 +46,17 @@ func RegisterScheduleConsumer(
 	nc *nats.Conn,
 	handler jetstream.MessageHandler,
 ) (*scheduleConsumer, error) {
-	streamConfig, consumerConfig := buildScheduleConfigs()
-
 	js, err := jetstream.New(nc)
 	if err != nil {
 		return nil, err
 	}
 
-	stream, err := js.Stream(ctx, streamConfig.Name)
-	if err == jetstream.ErrStreamNotFound {
-		stream, err = js.CreateStream(ctx, streamConfig)
-		if err != nil {
-			return nil, err
-		}
-	} else if err != nil {
+	stream, err := js.Stream(ctx, SCHEDULE_STREAM)
+	if err != nil {
 		return nil, err
 	}
 
-	consumer, err := stream.CreateConsumer(ctx, consumerConfig)
+	consumer, err := stream.Consumer(ctx, SCHEDULE_CONSUMER)
 	if err != nil {
 		return nil, err
 	}

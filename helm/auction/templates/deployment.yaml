@@ -1,0 +1,63 @@
+{{- range $name, $worker := .Values.workers }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "auction.fullname" $ }}-{{ $name }}-worker
+spec:
+  replicas: {{ $worker.replicas }}
+  selector:
+    matchLabels:
+      app: {{ include "auction.fullname" $ }}-{{ $name }}-worker
+  template:
+    metadata:
+      labels:
+        app: {{ include "auction.fullname" $ }}-{{ $name }}-worker
+    spec:
+      containers:
+        - name: worker
+          image: "{{ $.Values.image.repository }}/worker:{{ $.Values.image.tag }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          args: ["--task", {{ $name | quote }}]
+          envFrom:
+            - configMapRef:
+                name: {{ include "auction.fullname" $ }}-endpoints
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "auction.fullname" . }}-grpc-server
+spec:
+  replicas: {{ .Values.server.replicas }}
+  selector:
+    matchLabels:
+      app: {{ include "auction.fullname" . }}-grpc-server
+  template:
+    metadata:
+      labels:
+        app: {{ include "auction.fullname" . }}-grpc-server
+    spec:
+      containers:
+        - name: server
+          image: "{{ .Values.image.repository }}/server:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: grpc
+              containerPort: 50051
+          env:
+            - name: GRPC_PORT
+              value: "50051"
+          envFrom:
+            - configMapRef:
+                name: {{ include "auction.fullname" . }}-endpoints
+          readinessProbe:
+            tcpSocket:
+              port: grpc
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: grpc
+            initialDelaySeconds: 5
+            periodSeconds: 20

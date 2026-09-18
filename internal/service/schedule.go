@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
-	"github.com/nats-io/nats.go/jetstream"
 )
 
 const (
@@ -22,23 +21,6 @@ const (
 type scheduleMessageData struct {
 	// ItemID identifies the listing associated with the scheduled message.
 	ItemID uint64 `json:"itemID"`
-}
-
-// buildScheduleConfigs builds the stream and consumer configs used for scheduled messages.
-func buildScheduleConfigs() (jetstream.StreamConfig, jetstream.ConsumerConfig) {
-	streamConfig := jetstream.StreamConfig{
-		Name:              SCHEDULE_STREAM,
-		Subjects:          []string{HOLDING_SUBJECT, DELIVERY_SUBJECT},
-		AllowMsgSchedules: true,
-	}
-
-	consumerConfig := jetstream.ConsumerConfig{
-		Durable:       SCHEDULE_CONSUMER,
-		AckPolicy:     jetstream.AckExplicitPolicy,
-		FilterSubject: DELIVERY_SUBJECT,
-	}
-
-	return streamConfig, consumerConfig
 }
 
 // newScheduleMessage creates the scheduled NATS message used to expire a listing.

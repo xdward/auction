@@ -1,0 +1,29 @@
+{{- if .Values.jetstreamResources.enabled }}
+apiVersion: jetstream.nats.io/v1beta2
+kind: Stream
+metadata:
+  name: {{ include "auction.fullname" . }}-schedules
+spec:
+  name: {{ .Values.jetstreamResources.stream.name }}
+  servers:
+    - {{ include "auction.natsAddress" . | quote }}
+  subjects:
+    - auction.schedule.*
+    - auction.target.*
+  storage: file
+  replicas: {{ .Values.jetstreamResources.stream.replicas }}
+  allowRollup: true
+  allowMsgSchedules: true
+---
+apiVersion: jetstream.nats.io/v1beta2
+kind: Consumer
+metadata:
+  name: {{ include "auction.fullname" . }}-schedule-watcher
+spec:
+  streamName: {{ .Values.jetstreamResources.stream.name }}
+  durableName: {{ .Values.jetstreamResources.consumer.durableName }}
+  servers:
+    - {{ include "auction.natsAddress" . | quote }}
+  filterSubject: auction.target.*
+  ackPolicy: explicit
+{{- end }}

@@ -1,0 +1,35 @@
+image:
+    repository: auction # ghcr.io/xdward/auction
+    pullPolicy: Never # IfNotPresent
+    tag: latest # overrides the image tag (default: chart appVersion)
+
+service:
+    type: ClusterIP
+    port: 50051
+
+server:
+  replicas: 1
+
+workers:
+  expire:
+    replicas: 1
+  sell:
+    replicas: 1
+  bid:
+    replicas: 1
+  cancel:
+    replicas: 1
+
+redis:
+  url: redis://redis.example.com:6379
+
+nats:
+  url: nats://nats.nats.svc.cluster.local:4222
+
+jetstreamResources:
+  enabled: true
+  stream:
+    name: AUCTION_SCHEDULES
+    replicas: 3 # must not exceed the replica count of the JetStream cluster
+  consumer:
+    durableName: schedule-watcher
