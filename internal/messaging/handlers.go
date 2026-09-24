@@ -1,4 +1,4 @@
-package service
+package messaging
 
 import (
 	"context"
@@ -15,15 +15,8 @@ import (
 )
 
 // SellHandler returns a function that processes a sell request and schedules its expiration.
-func SellHandler(auction *auctionstore.Client, nc *nats.Conn) func(msg *nats.Msg) {
-	stream, err := jetstream.New(nc)
-	if err != nil {
-		panic(err)
-	}
-
+func SellHandler(auction *auctionstore.Client, stream jetstream.JetStream) func(msg *nats.Msg) {
 	return func(msg *nats.Msg) {
-		slog.Debug("received message")
-
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 
@@ -34,18 +27,14 @@ func SellHandler(auction *auctionstore.Client, nc *nats.Conn) func(msg *nats.Msg
 				slog.String("error", err.Error()),
 				slog.Any("data", msg.Data),
 			)
-			if err := msg.Respond([]byte("error")); err != nil {
-				slog.Error("failed to send error response",
-					slog.String("nats_msg_response_error", err.Error()),
-				)
-			}
+			_ = msg.Respond(nil)
 			return
 		}
 
 		// record the current time and calculate the expiration time
 		start, end := util.DurationTimestamps(sellRequest.Duration)
 
-		// perform the auction sell action
+		// process the sell request
 		success, err := auction.Sell(ctx, &sellRequest, start, end)
 		if err != nil {
 			slog.Error("failed to process sell request",
@@ -54,16 +43,12 @@ func SellHandler(auction *auctionstore.Client, nc *nats.Conn) func(msg *nats.Msg
 				slog.Time("start", start),
 				slog.Time("end", end),
 			)
-			if err := msg.Respond([]byte("error")); err != nil {
-				slog.Error("failed to send error response",
-					slog.String("nats_msg_response_error", err.Error()),
-				)
-			}
+			_ = msg.Respond(nil)
 			return
 		}
 
+		// if successful, schedule the expiration
 		if success {
-			// create a scheduled nats message for expiration
 			scheduleMsg, err := newScheduleMessage(sellRequest.ItemId, end)
 			if err != nil {
 				slog.Error("failed to create schedule message",
@@ -71,15 +56,10 @@ func SellHandler(auction *auctionstore.Client, nc *nats.Conn) func(msg *nats.Msg
 					slog.Any("request", &sellRequest),
 					slog.Any("schedule", scheduleMsg),
 				)
-				if err := msg.Respond([]byte("error")); err != nil {
-					slog.Error("failed to send error response",
-						slog.String("nats_msg_response_error", err.Error()),
-					)
-				}
+				_ = msg.Respond(nil)
 				return
 			}
 
-			// publish the schedule
 			_, err = stream.PublishMsg(ctx, scheduleMsg)
 			if err != nil {
 				slog.Error("failed to publish schedule message",
@@ -87,11 +67,7 @@ func SellHandler(auction *auctionstore.Client, nc *nats.Conn) func(msg *nats.Msg
 					slog.Any("request", &sellRequest),
 					slog.Any("schedule", scheduleMsg),
 				)
-				if err := msg.Respond([]byte("error")); err != nil {
-					slog.Error("failed to send error response",
-						slog.String("nats_msg_response_error", err.Error()),
-					)
-				}
+				_ = msg.Respond(nil)
 				return
 			}
 		}
@@ -107,29 +83,21 @@ func SellHandler(auction *auctionstore.Client, nc *nats.Conn) func(msg *nats.Msg
 				slog.Any("request", &sellRequest),
 				slog.Any("response", &sellResponse),
 			)
-			if err := msg.Respond([]byte("error")); err != nil {
-				slog.Error("failed to send error response",
-					slog.String("nats_msg_response_error", err.Error()),
-				)
-			}
+			_ = msg.Respond(nil)
 			return
 		}
 		if err := msg.Respond(replyMsg); err != nil {
 			slog.Error("failed to send response",
-				slog.String("nats_msg_response_error", err.Error()),
+				slog.String("error", err.Error()),
 			)
 			return
 		}
-
-		slog.Debug("delivered response")
 	}
 }
 
 // BidHandler returns a function that processes a bid request.
 func BidHandler(auction *auctionstore.Client) func(msg *nats.Msg) {
 	return func(msg *nats.Msg) {
-		slog.Debug("received message")
-
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 
@@ -140,26 +108,18 @@ func BidHandler(auction *auctionstore.Client) func(msg *nats.Msg) {
 				slog.String("error", err.Error()),
 				slog.Any("data", msg.Data),
 			)
-			if err := msg.Respond([]byte("error")); err != nil {
-				slog.Error("failed to send error response",
-					slog.String("nats_msg_response_error", err.Error()),
-				)
-			}
+			_ = msg.Respond(nil)
 			return
 		}
 
-		// perform the auction bid action
+		// process the bid request
 		success, err := auction.Bid(ctx, &bidRequest)
 		if err != nil {
 			slog.Error("failed to process bid request",
 				slog.String("error", err.Error()),
 				slog.Any("request", &bidRequest),
 			)
-			if err := msg.Respond([]byte("error")); err != nil {
-				slog.Error("failed to send error response",
-					slog.String("nats_msg_response_error", err.Error()),
-				)
-			}
+			_ = msg.Respond(nil)
 			return
 		}
 
@@ -174,29 +134,21 @@ func BidHandler(auction *auctionstore.Client) func(msg *nats.Msg) {
 				slog.Any("request", &bidRequest),
 				slog.Any("response", bidResponse),
 			)
-			if err := msg.Respond([]byte("error")); err != nil {
-				slog.Error("failed to send error response",
-					slog.String("nats_msg_response_error", err.Error()),
-				)
-			}
+			_ = msg.Respond(nil)
 			return
 		}
 		if err := msg.Respond(replyMsg); err != nil {
 			slog.Error("failed to send response",
-				slog.String("nats_msg_response_error", err.Error()),
+				slog.String("error", err.Error()),
 			)
 			return
 		}
-
-		slog.Debug("delivered response")
 	}
 }
 
 // CancelHandler returns a function that processes a cancel request.
 func CancelHandler(auction *auctionstore.Client) func(msg *nats.Msg) {
 	return func(msg *nats.Msg) {
-		slog.Debug("received message")
-
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 
@@ -207,26 +159,18 @@ func CancelHandler(auction *auctionstore.Client) func(msg *nats.Msg) {
 				slog.String("error", err.Error()),
 				slog.Any("data", msg.Data),
 			)
-			if err := msg.Respond([]byte("error")); err != nil {
-				slog.Error("failed to send error response",
-					slog.String("nats_msg_response_error", err.Error()),
-				)
-			}
+			_ = msg.Respond(nil)
 			return
 		}
 
-		// perform the auction cancel action
+		// process the cancel request
 		success, err := auction.Cancel(ctx, &cancelRequest)
 		if err != nil {
 			slog.Error("failed to process cancel request",
 				slog.String("error", err.Error()),
 				slog.Any("request", &cancelRequest),
 			)
-			if err := msg.Respond([]byte("error")); err != nil {
-				slog.Error("failed to send error response",
-					slog.String("nats_msg_response_error", err.Error()),
-				)
-			}
+			_ = msg.Respond(nil)
 			return
 		}
 
@@ -241,29 +185,21 @@ func CancelHandler(auction *auctionstore.Client) func(msg *nats.Msg) {
 				slog.Any("request", &cancelRequest),
 				slog.Any("response", cancelResponse),
 			)
-			if err := msg.Respond([]byte("error")); err != nil {
-				slog.Error("failed to send error response",
-					slog.String("nats_msg_response_error", err.Error()),
-				)
-			}
+			_ = msg.Respond(nil)
 			return
 		}
 		if err := msg.Respond(replyMsg); err != nil {
 			slog.Error("failed to send response",
-				slog.String("nats_msg_response_error", err.Error()),
+				slog.String("error", err.Error()),
 			)
 			return
 		}
-
-		slog.Debug("delivered response")
 	}
 }
 
 // ExpireHandler returns a function that processes an expiration message for a listing.
 func ExpireHandler(auction *auctionstore.Client) func(msg jetstream.Msg) {
 	return func(msg jetstream.Msg) {
-		slog.Debug("received message")
-
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 
@@ -277,7 +213,7 @@ func ExpireHandler(auction *auctionstore.Client) func(msg jetstream.Msg) {
 			return
 		}
 
-		// perform the auction expire action
+		// process the scheduled expiration
 		err := auction.Expire(ctx, scheduleData.ItemID)
 		if err != nil {
 			// don't nak as it will either:
@@ -294,7 +230,5 @@ func ExpireHandler(auction *auctionstore.Client) func(msg jetstream.Msg) {
 			slog.Error("failed to ack message")
 			return
 		}
-
-		slog.Debug("acknowledged message")
 	}
 }

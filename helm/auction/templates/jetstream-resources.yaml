@@ -10,6 +10,7 @@ spec:
   subjects:
     - auction.schedule.*
     - auction.target.*
+  retention: workqueue
   storage: file
   replicas: {{ .Values.jetstreamResources.stream.replicas }}
   allowRollup: true
