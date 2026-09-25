@@ -2,7 +2,7 @@
 
 #### Setup Stage ####
 
-FROM golang:1.26 AS base-stage
+FROM golang:1.27 AS base-stage
 
 ENV CGO_ENABLED=0 \
     GOOS=linux \
