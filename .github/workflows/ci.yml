@@ -8,7 +8,7 @@ on:
         paths-ignore:
             - ".gitignore"
             - "Dockerfile"
-            - "compose.yml"
+            - "compose.yaml"
             - "README.md"
             - "helm/**"
     pull_request:
@@ -17,7 +17,7 @@ on:
         paths-ignore:
             - ".gitignore"
             - "Dockerfile"
-            - "compose.yml"
+            - "compose.yaml"
             - "README.md"
             - "helm/**"
 
