@@ -1,4 +1,4 @@
-name: Helm
+name: Kubernetes
 
 on:
     workflow_dispatch:
