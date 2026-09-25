@@ -1,15 +1,16 @@
 name: CI
 
 on:
-    workflow_dispatch:
     push:
         branches:
             - main
+            - dev
         paths-ignore:
             - ".gitignore"
             - "Dockerfile"
             - "compose.yml"
             - "README.md"
+            - "helm/**"
     pull_request:
         branches:
             - main
@@ -18,17 +19,19 @@ on:
             - "Dockerfile"
             - "compose.yml"
             - "README.md"
+            - "helm/**"
 
 jobs:
     test:
         name: Test
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-go@v5
+            - uses: actions/checkout@v7
+            - uses: actions/setup-go@v7
               with:
                   go-version-file: go.mod
                   cache: true
+                  cache-dependency-path: go.sum
             - run: go mod download
             - run: go test ./...
     gosec:
@@ -37,7 +40,7 @@ jobs:
         env:
             GO111MODULE: on
         steps:
-            - uses: actions/checkout@v3
+            - uses: actions/checkout@v7
             - uses: securego/gosec@master
               with:
                   args: ./...
