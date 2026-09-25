@@ -92,6 +92,7 @@ kubectl create namespace nats
 helm repo add nats https://nats-io.github.io/k8s/helm/charts/
 helm repo update
 helm upgrade --install nats nats/nats --namespace nats \
+  --set container.image.tag=2.15-alpine \
   --set config.cluster.enabled=true \
   --set config.cluster.replicas=3 \
   --set config.jetstream.enabled=true \
@@ -133,7 +134,7 @@ kubectl get pods --namespace auction
 > For local Kind development, run Redis on the Kind Docker network:
 >
 > ```sh
-> docker run -d --name auction-redis --network kind redis:8-alpine
+> docker run -d --name auction-redis --network kind redis:8.10-alpine
 > REDIS_ADDRESS="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' auction-redis):6379"
 > ```
 

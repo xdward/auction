@@ -1,0 +1,108 @@
+name: Helm
+
+on:
+    workflow_dispatch:
+    push:
+        branches:
+            - main
+        paths-ignore:
+            - ".gitignore"
+            - "compose.yaml"
+            - "README.md"
+    pull_request:
+        branches:
+            - main
+        paths-ignore:
+            - ".gitignore"
+            - "compose.yaml"
+            - "README.md"
+
+jobs:
+    test:
+        name: Test Chart
+        runs-on: ubuntu-latest
+        timeout-minutes: 2
+        steps:
+            - uses: actions/checkout@v7
+            - uses: azure/setup-helm@v4
+              with:
+                  version: v3.17.3
+            - run: helm lint helm/auction
+            - run: |
+                  helm template auction helm/auction \
+                    --set redis.url=redis://redis.example.com:6379 \
+                    --set nats.url=nats://nats.nats.svc.cluster.local:4222
+
+    integration:
+        name: Kubernetes Integration
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        steps:
+            - uses: actions/checkout@v7
+            - uses: azure/setup-helm@v4
+              with:
+                  version: v3.17.3
+            - uses: helm/kind-action@v1.12.0
+              with:
+                  cluster_name: auction
+            - uses: docker/setup-buildx-action@v3
+            - name: Add NATS Helm Repository
+              run: |
+                  helm repo add nats https://nats-io.github.io/k8s/helm/charts/
+                  helm repo update
+            - name: Install NATS
+              run: |
+                  kubectl create namespace nats
+                  helm upgrade --install nats nats/nats --namespace nats --wait --timeout 1m \
+                    --set container.image.tag=2.15-alpine \
+                    --set config.cluster.enabled=true \
+                    --set config.cluster.replicas=3 \
+                    --set config.jetstream.enabled=true \
+                    --set config.jetstream.fileStore.pvc.size=1Gi
+            - name: Install NACK
+              run: |
+                  kubectl create namespace auction
+                  helm upgrade --install auction-nack nats/nack --namespace auction --wait --timeout 1m \
+                    --set jetstream.nats.url=nats://nats.nats.svc.cluster.local:4222 \
+                    --set jetstream.controlLoop=true \
+                    --set namespaced=true
+            - name: Install Redis
+              run: |
+                  kubectl create deployment redis --namespace auction --image=redis:8.10-alpine
+                  kubectl expose deployment redis --namespace auction --port=6379 --target-port=6379
+                  kubectl rollout status deployment/redis --namespace auction --timeout=1m
+            - name: Build Worker Image
+              uses: docker/build-push-action@v6
+              with:
+                  context: .
+                  target: worker
+                  tags: auction/worker:latest
+                  load: true
+                  cache-from: type=gha,scope=auction-worker
+                  cache-to: type=gha,mode=max,scope=auction-worker
+            - name: Build Server Image
+              uses: docker/build-push-action@v6
+              with:
+                  context: .
+                  target: server
+                  tags: auction/server:latest
+                  load: true
+                  cache-from: type=gha,scope=auction-server
+                  cache-to: type=gha,mode=max,scope=auction-server
+            - name: Load Docker Images
+              run: kind load docker-image auction/server:latest auction/worker:latest --name auction
+            - name: Install Auction Chart
+              run: |
+                  helm upgrade --install auction ./helm/auction --namespace auction --wait --timeout 1m \
+                    --set redis.url=redis://redis.auction.svc.cluster.local:6379 \
+                    --set nats.url=nats://nats.nats.svc.cluster.local:4222
+                  kubectl rollout status deployment --namespace auction --all --timeout=1m
+                  kubectl wait --namespace auction --for=condition=Ready pod --all --timeout=1m
+                  kubectl wait --namespace nats --for=condition=Ready pod --all --timeout=1m
+                  kubectl get stream,consumer --namespace auction
+            - name: Collect Kubernetes Diagnostics
+              if: always()
+              run: |
+                  kubectl get all,stream,consumer --namespace auction
+                  kubectl get all --namespace nats
+                  kubectl logs --namespace auction --all-containers --prefix --selector app || true
