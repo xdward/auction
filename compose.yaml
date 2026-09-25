@@ -1,33 +1,29 @@
 services:
     nats:
-        image: nats:alpine
-        command: -js -sd /data -m 8222
+        image: nats:2.15-alpine
+        command: -js -m 8222 -DV
         networks:
             - isolated
-        volumes:
-            - nats_jetstream:/data
         healthcheck:
             test:
                 [
                     "CMD-SHELL",
                     "wget -qO- --server-response http://localhost:8222/healthz 2>&1 | grep -q 'HTTP/1.1 200 OK'",
                 ]
-            interval: 10s
+            interval: 30s
             timeout: 1s
-            start_period: 5s
+            start_period: 1s
 
     redis:
-        image: redis:8-alpine
+        image: redis:8.10-alpine
         command: redis-server --appendonly yes --appendfsync everysec
-        volumes:
-            - redis_data:/data
         networks:
             - isolated
         healthcheck:
             test: ["CMD", "redis-cli", "ping"]
-            interval: 10s
+            interval: 30s
             timeout: 1s
-            start_period: 5s
+            start_period: 1s
 
     # The expire service worker is critical for the integrity of the auction service. Other worker
     # servives will depend on this service. This avoids issues such as someone placing a bid after
@@ -120,10 +116,6 @@ services:
             - public
         ports:
             - 50051:50051
-
-volumes:
-    nats_jetstream:
-    redis_data:
 
 networks:
     isolated:
