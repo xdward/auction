@@ -97,7 +97,7 @@ jobs:
                   helm upgrade --install auction ./helm/auction --namespace auction --wait --timeout 1m \
                     --set redis.url=redis://redis.auction.svc.cluster.local:6379 \
                     --set nats.url=nats://nats.nats.svc.cluster.local:4222
-                  kubectl rollout status deployment --namespace auction --all --timeout=1m
+                  kubectl wait --namespace auction --for=condition=Available deployment --all --timeout=1m
                   kubectl wait --namespace auction --for=condition=Ready pod --all --timeout=1m
                   kubectl wait --namespace nats --for=condition=Ready pod --all --timeout=1m
                   kubectl get stream,consumer --namespace auction
