@@ -13,7 +13,7 @@ import (
 func decodeStreamData(msg *redis.XMessage) ([]byte, error) {
 	raw, ok := msg.Values["data"]
 	if !ok {
-		return nil, StreamDataErr
+		return nil, ErrMissingStreamData
 	}
 
 	switch data := raw.(type) {
@@ -22,7 +22,7 @@ func decodeStreamData(msg *redis.XMessage) ([]byte, error) {
 	case string:
 		return []byte(data), nil
 	default:
-		return nil, StreamDecodeErr
+		return nil, ErrInvalidStreamData
 	}
 }
 

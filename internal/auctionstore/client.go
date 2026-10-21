@@ -83,7 +83,7 @@ func (c *Client) Sell(
 		if exists, err := tx.Exists(ctx, key).Result(); err != nil {
 			return err
 		} else if exists > 0 {
-			return AlreadyExistsErr
+			return ErrListingExists
 		}
 
 		// transactional pipeline for executing multiple commands in a single read/write:
@@ -119,7 +119,7 @@ func (c *Client) Sell(
 
 	// watch the listing key and execute the transactional function
 	if err := c.rdb.Watch(ctx, txf, key); err != nil {
-		if err == AlreadyExistsErr {
+		if err == ErrListingExists {
 			return false, nil
 		} else {
 			return false, err
@@ -163,7 +163,7 @@ func (c *Client) Bid(ctx context.Context, bidRequest *pb.BidRequest) (bool, erro
 		if exists, err := tx.Exists(ctx, key).Result(); err != nil {
 			return err
 		} else if exists == 0 {
-			return NotFoundErr
+			return ErrNotFound
 		}
 
 		// ensure the new bid is higher than the current bid
@@ -171,7 +171,7 @@ func (c *Client) Bid(ctx context.Context, bidRequest *pb.BidRequest) (bool, erro
 		if err != nil {
 			return err
 		} else if !(bidRequest.Amount > currentBid) {
-			return LowBidErr
+			return ErrBidTooLow
 		}
 
 		// block self bids
@@ -179,7 +179,7 @@ func (c *Client) Bid(ctx context.Context, bidRequest *pb.BidRequest) (bool, erro
 		if err != nil {
 			return err
 		} else if bidRequest.BidderId == bidderID {
-			return UnauthorizedErr
+			return ErrUnauthorized
 		}
 
 		// transactional pipeline for executing multiple commands in a single read/write:
@@ -199,7 +199,7 @@ func (c *Client) Bid(ctx context.Context, bidRequest *pb.BidRequest) (bool, erro
 
 	// watch the listing key and execute the transactional function
 	if err := c.rdb.Watch(ctx, txf, key); err != nil {
-		if err == NotFoundErr || err == LowBidErr || err == UnauthorizedErr {
+		if err == ErrNotFound || err == ErrBidTooLow || err == ErrUnauthorized {
 			return false, nil
 		} else {
 			return false, err
@@ -224,14 +224,14 @@ func (c *Client) Cancel(ctx context.Context, cancelRequest *pb.CancelRequest) (b
 		if exists, err := tx.Exists(ctx, key).Result(); err != nil {
 			return err
 		} else if exists == 0 {
-			return NotFoundErr
+			return ErrNotFound
 		}
 
 		// check if the user is authorized to cancel the bid
 		if sellerID, err := tx.HGet(ctx, key, "seller").Uint64(); err != nil {
 			return err
 		} else if cancelRequest.SellerId != sellerID {
-			return UnauthorizedErr
+			return ErrUnauthorized
 		}
 
 		// get the current bid and bidder
@@ -280,7 +280,7 @@ func (c *Client) Cancel(ctx context.Context, cancelRequest *pb.CancelRequest) (b
 
 	// watch the listing key and execute the transactional function
 	if err := c.rdb.Watch(ctx, txf, key); err != nil {
-		if err == NotFoundErr || err == UnauthorizedErr {
+		if err == ErrNotFound || err == ErrUnauthorized {
 			return false, nil
 		} else {
 			return false, err
@@ -321,7 +321,7 @@ func (c *Client) Expire(ctx context.Context, itemID uint64) error {
 		if exists, err := tx.Exists(ctx, key).Result(); err != nil {
 			return err
 		} else if exists == 0 {
-			return NotFoundErr
+			return ErrNotFound
 		}
 
 		// get the current bid, the highest bidder, and the seller

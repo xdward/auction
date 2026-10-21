@@ -481,7 +481,7 @@ func TestExpireMissing(t *testing.T) {
 		Addr: server.Addr(),
 	})
 
-	if err := client.Expire(ctx, 1); err != NotFoundErr {
-		t.Error("expected expire to return NotFoundErr for nonexistent listings")
+	if err := client.Expire(ctx, 1); err != ErrNotFound {
+		t.Error("expected expire to return ErrNotFound for nonexistent listings")
 	}
 }

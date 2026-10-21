@@ -3,11 +3,11 @@ package auctionstore
 import "errors"
 
 var (
-	AlreadyExistsErr = errors.New("item already exists")
-	LowBidErr        = errors.New("the bid is lower")
-	RedisScriptErr   = errors.New("unexpected script result")
-	NotFoundErr      = errors.New("listing does not exist")
-	UnauthorizedErr  = errors.New("action unauthorized")
-	StreamDataErr    = errors.New("stream entry missing data")
-	StreamDecodeErr  = errors.New("invalid stream entry")
+	ErrListingExists     = errors.New("item already exists")
+	ErrBidTooLow         = errors.New("the bid is lower")
+	ErrScriptResult      = errors.New("unexpected script result")
+	ErrNotFound          = errors.New("listing does not exist")
+	ErrUnauthorized      = errors.New("action unauthorized")
+	ErrMissingStreamData = errors.New("stream entry missing data")
+	ErrInvalidStreamData = errors.New("invalid stream entry")
 )

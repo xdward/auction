@@ -34,7 +34,7 @@ jobs:
                   cache: true
                   cache-dependency-path: go.sum
             - run: go mod download
-            - run: go test ./...
+            - run: go test -timeout 5s ./...
     gosec:
         name: Code Analysis
         runs-on: ubuntu-latest

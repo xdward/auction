@@ -2,16 +2,6 @@ package auctionstore
 
 import "strconv"
 
-// Redis key prefixes and shared keys used by the auction store.
-const (
-	ListingKeyPrefix     string = "auction:listing:"
-	SortedSetKey         string = "auction:listing:recent"
-	CancelledSetKey      string = "auction:listing:cancelled"
-	VersionKey           string = "auction:version"
-	StreamKey            string = "auction:stream:events"
-	VersionToEntryPrefix string = "auction:version_to_id:"
-)
-
 // Listing mirrors the Redis hash stored for each auction listing.
 type Listing struct {
 	Item      uint64 `redis:"item"`
